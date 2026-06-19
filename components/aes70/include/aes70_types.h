@@ -107,6 +107,38 @@ typedef enum {
     AES70_FILTER_LINKWITZ_RILEY = 4,
 } aes70_filter_shape_t;
 
+/* ---- OcaParametricEQShape (OcaFilterParametric) -------------------------- */
+typedef enum {
+    AES70_PEQ_NONE       = 0,
+    AES70_PEQ_PEQ        = 1,   /* peaking / bell */
+    AES70_PEQ_LOW_SHELF  = 2,
+    AES70_PEQ_HIGH_SHELF = 3,
+    AES70_PEQ_LOWPASS    = 4,
+    AES70_PEQ_HIGHPASS   = 5,
+    AES70_PEQ_BANDPASS   = 6,
+    AES70_PEQ_ALLPASS    = 7,
+    AES70_PEQ_NOTCH      = 8,
+} aes70_parametric_eq_shape_t;
+
+/* ---- OcaWaveformType (OcaSignalGenerator) -------------------------------- */
+typedef enum {
+    AES70_WAVE_NONE         = 0,
+    AES70_WAVE_DC           = 1,
+    AES70_WAVE_SINE         = 2,
+    AES70_WAVE_SQUARE       = 3,
+    AES70_WAVE_IMPULSE      = 4,
+    AES70_WAVE_NOISE_PINK   = 5,
+    AES70_WAVE_NOISE_WHITE  = 6,
+    AES70_WAVE_POLARITY_TEST = 7,
+} aes70_waveform_type_t;
+
+/* ---- OcaSweepType (OcaSignalGenerator) ----------------------------------- */
+typedef enum {
+    AES70_SWEEP_NONE        = 0,
+    AES70_SWEEP_LINEAR      = 1,
+    AES70_SWEEP_LOGARITHMIC = 2,
+} aes70_sweep_type_t;
+
 /* ---- Reserved object numbers (AES70-2) ----------------------------------- *
  * Managers occupy the low ONos; the device root block is conventionally 100;  *
  * application objects are assigned from AES70_ONO_APP_BASE upward.            */

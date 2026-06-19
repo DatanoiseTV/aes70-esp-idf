@@ -184,6 +184,58 @@ esp_err_t aes70_filter_set_passband(aes70_object_handle_t obj, uint8_t passband)
 esp_err_t aes70_filter_set_shape(aes70_object_handle_t obj, uint8_t shape);
 esp_err_t aes70_filter_set_order(aes70_object_handle_t obj, uint16_t order);
 
+/* ---- OcaFilterParametric (parametric EQ band) --------------------------- *
+ * `shape` is an aes70_parametric_eq_shape_t; gain is in dB, q is the Q factor. */
+aes70_object_handle_t aes70_parametric_eq_create(aes70_device_handle_t dev, aes70_object_handle_t parent,
+                                                 const char *role, uint8_t shape, float frequency,
+                                                 float gain_db, float q);
+float     aes70_parametric_eq_get_frequency(aes70_object_handle_t obj);
+float     aes70_parametric_eq_get_gain(aes70_object_handle_t obj);
+float     aes70_parametric_eq_get_q(aes70_object_handle_t obj);
+uint8_t   aes70_parametric_eq_get_shape(aes70_object_handle_t obj);
+esp_err_t aes70_parametric_eq_set_frequency(aes70_object_handle_t obj, float hz);
+esp_err_t aes70_parametric_eq_set_gain(aes70_object_handle_t obj, float db);
+esp_err_t aes70_parametric_eq_set_q(aes70_object_handle_t obj, float q);
+esp_err_t aes70_parametric_eq_set_shape(aes70_object_handle_t obj, uint8_t shape);
+
+/* ---- OcaPanBalance (position -1=left .. +1=right) ------------------------ */
+aes70_object_handle_t aes70_panbalance_create(aes70_device_handle_t dev, aes70_object_handle_t parent,
+                                              const char *role);
+float     aes70_panbalance_get_position(aes70_object_handle_t obj);
+esp_err_t aes70_panbalance_set_position(aes70_object_handle_t obj, float position);
+
+/* ---- OcaSignalGenerator (test signal) ----------------------------------- *
+ * `waveform` is an aes70_waveform_type_t; level is in dB. */
+aes70_object_handle_t aes70_signal_generator_create(aes70_device_handle_t dev, aes70_object_handle_t parent,
+                                                    const char *role, uint8_t waveform,
+                                                    float frequency, float level_db);
+float     aes70_signal_generator_get_frequency(aes70_object_handle_t obj);
+float     aes70_signal_generator_get_level(aes70_object_handle_t obj);
+uint8_t   aes70_signal_generator_get_waveform(aes70_object_handle_t obj);
+bool      aes70_signal_generator_is_generating(aes70_object_handle_t obj);
+esp_err_t aes70_signal_generator_set_frequency(aes70_object_handle_t obj, float hz);
+esp_err_t aes70_signal_generator_set_level(aes70_object_handle_t obj, float db);
+esp_err_t aes70_signal_generator_set_waveform(aes70_object_handle_t obj, uint8_t waveform);
+esp_err_t aes70_signal_generator_start(aes70_object_handle_t obj);
+esp_err_t aes70_signal_generator_stop(aes70_object_handle_t obj);
+
+/* ---- OcaFrequencyActuator (Hz) ------------------------------------------ */
+aes70_object_handle_t aes70_frequency_create(aes70_device_handle_t dev, aes70_object_handle_t parent,
+                                             const char *role, float min_hz, float max_hz, float init_hz);
+float     aes70_frequency_get(aes70_object_handle_t obj);
+esp_err_t aes70_frequency_set(aes70_object_handle_t obj, float hz);
+
+/* ---- OcaTemperatureSensor (deg C, read-only; device reports) ------------ */
+aes70_object_handle_t aes70_temperature_create(aes70_device_handle_t dev, aes70_object_handle_t parent,
+                                               const char *role, float min_c, float max_c);
+esp_err_t aes70_temperature_report(aes70_object_handle_t obj, float celsius);
+
+/* ---- OcaIdentificationActuator (identify on/off) ------------------------ */
+aes70_object_handle_t aes70_identify_create(aes70_device_handle_t dev, aes70_object_handle_t parent,
+                                            const char *role);
+bool      aes70_identify_get(aes70_object_handle_t obj);
+esp_err_t aes70_identify_set(aes70_object_handle_t obj, bool active);
+
 #ifdef __cplusplus
 }
 #endif

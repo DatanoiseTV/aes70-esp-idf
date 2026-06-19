@@ -234,6 +234,26 @@ static aes70_status_t level_sensor_dispatch(struct aes70_object *obj, uint16_t i
     }
 }
 
+/* ---- OcaIdentificationActuator (1.1.1.21, level 4): GetActive/SetActive -- */
+aes70_status_t aes70_identify_dispatch(struct aes70_object *obj, uint16_t idx,
+                                       ocp1_rd_t *in, ocp1_wr_t *out, uint8_t *pc)
+{
+    switch (idx) {
+    case 1: /* GetActive -> OcaBoolean */
+        ocp1_wr_u8(out, obj->num != 0.0 ? 1 : 0);
+        *pc = 1;
+        return AES70_OK;
+    case 2: { /* SetActive <- OcaBoolean */
+        uint8_t v = ocp1_rd_u8(in);
+        if (in->err) return AES70_BAD_FORMAT;
+        aes70_object_commit_num(obj, v ? 1 : 0, 4, 1, true);
+        return AES70_OK;
+    }
+    default:
+        return AES70_BAD_METHOD;
+    }
+}
+
 /* ---- OcaBasicActuator children (level 5): GetSetting/SetSetting ---------- */
 static aes70_status_t basic_actuator_dispatch(struct aes70_object *obj, uint16_t idx,
                                               ocp1_rd_t *in, ocp1_wr_t *out, uint8_t *pc)
@@ -321,8 +341,12 @@ static const aes70_method_fn lv_switch[]  = { aes70_root_dispatch, aes70_worker_
 static const aes70_method_fn lv_delay[]   = { aes70_root_dispatch, aes70_worker_dispatch, NULL, delay_dispatch };
 static const aes70_method_fn lv_basic[]   = { aes70_root_dispatch, aes70_worker_dispatch, NULL, NULL, basic_actuator_dispatch };
 static const aes70_method_fn lv_level[]   = { aes70_root_dispatch, aes70_worker_dispatch, sensor_dispatch, level_sensor_dispatch };
+static const aes70_method_fn lv_identify[] = { aes70_root_dispatch, aes70_worker_dispatch, NULL, aes70_identify_dispatch };
 static const aes70_method_fn lv_dynamics[] = { aes70_root_dispatch, aes70_worker_dispatch, NULL, aes70_dynamics_dispatch };
 static const aes70_method_fn lv_filter[]  = { aes70_root_dispatch, aes70_worker_dispatch, NULL, aes70_filter_dispatch };
+static const aes70_method_fn lv_peq[]     = { aes70_root_dispatch, aes70_worker_dispatch, NULL, aes70_peq_dispatch };
+static const aes70_method_fn lv_pan[]     = { aes70_root_dispatch, aes70_worker_dispatch, NULL, aes70_pan_dispatch };
+static const aes70_method_fn lv_siggen[]  = { aes70_root_dispatch, aes70_worker_dispatch, NULL, aes70_siggen_dispatch };
 static const aes70_method_fn lv_devmgr[]  = { aes70_root_dispatch, NULL, aes70_devmgr_dispatch };
 static const aes70_method_fn lv_submgr[]  = { aes70_root_dispatch, NULL, aes70_submgr_dispatch };
 
@@ -339,8 +363,14 @@ static const uint16_t cid_uint32[]  = { 1, 1, 1, 1, 8 };
 static const uint16_t cid_float32[] = { 1, 1, 1, 1, 10 };
 static const uint16_t cid_string[]  = { 1, 1, 1, 1, 12 };
 static const uint16_t cid_level[]    = { 1, 1, 2, 2 };
+static const uint16_t cid_temp[]     = { 1, 1, 2, 5 };
+static const uint16_t cid_freq[]     = { 1, 1, 1, 8 };
+static const uint16_t cid_identify[] = { 1, 1, 1, 21 };
 static const uint16_t cid_dynamics[] = { 1, 1, 1, 14 };
 static const uint16_t cid_filter[]   = { 1, 1, 1, 9 };
+static const uint16_t cid_peq[]      = { 1, 1, 1, 10 };
+static const uint16_t cid_pan[]      = { 1, 1, 1, 6 };
+static const uint16_t cid_siggen[]   = { 1, 1, 1, 17 };
 static const uint16_t cid_devmgr[]   = { 1, 3, 1 };
 static const uint16_t cid_submgr[]   = { 1, 3, 4 };
 
@@ -358,8 +388,14 @@ static const aes70_class_desc_t k_desc[AES70_K_COUNT] = {
     [AES70_K_FLOAT32]    = { cid_float32, 5, 3, lv_basic,  "OcaFloat32Actuator" },
     [AES70_K_STRING]     = { cid_string,  5, 3, lv_basic,  "OcaStringActuator" },
     [AES70_K_LEVEL_SENSOR] = { cid_level, 4, 3, lv_level,  "OcaLevelSensor" },
+    [AES70_K_TEMPERATURE]  = { cid_temp,  4, 3, lv_level,  "OcaTemperatureSensor" },
+    [AES70_K_FREQUENCY]    = { cid_freq,  4, 3, lv_gain,   "OcaFrequencyActuator" },
+    [AES70_K_IDENTIFY]     = { cid_identify, 4, 3, lv_identify, "OcaIdentificationActuator" },
     [AES70_K_DYNAMICS]     = { cid_dynamics, 4, 3, lv_dynamics, "OcaDynamics" },
     [AES70_K_FILTER_CLASSICAL] = { cid_filter, 4, 3, lv_filter, "OcaFilterClassical" },
+    [AES70_K_FILTER_PARAMETRIC] = { cid_peq, 4, 3, lv_peq, "OcaFilterParametric" },
+    [AES70_K_PANBALANCE]   = { cid_pan, 4, 3, lv_pan, "OcaPanBalance" },
+    [AES70_K_SIGNAL_GEN]   = { cid_siggen, 4, 3, lv_siggen, "OcaSignalGenerator" },
     [AES70_K_DEVICE_MANAGER]       = { cid_devmgr, 3, 3, lv_devmgr, "OcaDeviceManager" },
     [AES70_K_SUBSCRIPTION_MANAGER] = { cid_submgr, 3, 4, lv_submgr, "OcaSubscriptionManager" },
 };

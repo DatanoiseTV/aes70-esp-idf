@@ -110,6 +110,8 @@ static void encode_value(struct aes70_object *obj, ocp1_wr_t *out)
     case AES70_K_GAIN:
     case AES70_K_FLOAT32:
     case AES70_K_LEVEL_SENSOR:
+    case AES70_K_TEMPERATURE:
+    case AES70_K_FREQUENCY:
         ocp1_wr_f32(out, (float)obj->num);
         break;
     case AES70_K_DELAY:
@@ -120,6 +122,7 @@ static void encode_value(struct aes70_object *obj, ocp1_wr_t *out)
         ocp1_wr_u8(out, (uint8_t)obj->num);     /* OcaMuteState / OcaPolarityState */
         break;
     case AES70_K_BOOLEAN:
+    case AES70_K_IDENTIFY:
         ocp1_wr_u8(out, obj->num != 0.0 ? 1 : 0);
         break;
     case AES70_K_SWITCH:
@@ -147,6 +150,7 @@ static bool primary_property(struct aes70_object *obj, uint16_t *level, uint16_t
     switch (obj->kind) {
     case AES70_K_GAIN: case AES70_K_MUTE: case AES70_K_POLARITY:
     case AES70_K_SWITCH: case AES70_K_DELAY: case AES70_K_LEVEL_SENSOR:
+    case AES70_K_TEMPERATURE: case AES70_K_FREQUENCY: case AES70_K_IDENTIFY:
         *level = 4; *index = 1; return true;   /* defined at OcaActuator/OcaSensor child level */
     case AES70_K_BOOLEAN: case AES70_K_INT32: case AES70_K_UINT16:
     case AES70_K_UINT32: case AES70_K_FLOAT32: case AES70_K_STRING:
@@ -239,7 +243,7 @@ void aes70_object_apply_set(aes70_device_t *dev, const aes70_set_req_t *req)
     switch (obj->kind) {
     case AES70_K_GAIN: case AES70_K_DELAY: case AES70_K_FLOAT32:
     case AES70_K_INT32: case AES70_K_UINT16: case AES70_K_UINT32:
-    case AES70_K_LEVEL_SENSOR:
+    case AES70_K_LEVEL_SENSOR: case AES70_K_TEMPERATURE: case AES70_K_FREQUENCY:
         if (v < obj->num_min) v = obj->num_min;   /* app path clamps silently */
         if (v > obj->num_max) v = obj->num_max;
         break;
@@ -487,3 +491,34 @@ esp_err_t aes70_level_sensor_report(aes70_object_handle_t obj, float db)
 {
     return set_num(obj, db);
 }
+
+/* ---- OcaFrequencyActuator (Hz) ------------------------------------------ */
+aes70_object_handle_t aes70_frequency_create(aes70_device_handle_t dev, aes70_object_handle_t parent,
+                                             const char *role, float min_hz, float max_hz, float init_hz)
+{
+    return make_num(dev, AES70_K_FREQUENCY, parent, role, min_hz, max_hz, init_hz);
+}
+float     aes70_frequency_get(aes70_object_handle_t obj)            { return (float)get_num(obj); }
+esp_err_t aes70_frequency_set(aes70_object_handle_t obj, float hz)  { return set_num(obj, hz); }
+
+/* ---- OcaTemperatureSensor (deg C, read-only; device reports) ------------ */
+aes70_object_handle_t aes70_temperature_create(aes70_device_handle_t dev, aes70_object_handle_t parent,
+                                               const char *role, float min_c, float max_c)
+{
+    struct aes70_object *o = make_num(dev, AES70_K_TEMPERATURE, parent, role, min_c, max_c, min_c);
+    if (o) o->reading_state = 1;   /* OcaSensorReadingState: Valid */
+    return o;
+}
+esp_err_t aes70_temperature_report(aes70_object_handle_t obj, float celsius)
+{
+    return set_num(obj, celsius);
+}
+
+/* ---- OcaIdentificationActuator (identify on/off) ------------------------ */
+aes70_object_handle_t aes70_identify_create(aes70_device_handle_t dev, aes70_object_handle_t parent,
+                                            const char *role)
+{
+    return make_num(dev, AES70_K_IDENTIFY, parent, role, 0, 1, 0);
+}
+bool      aes70_identify_get(aes70_object_handle_t obj)              { return get_num(obj) != 0; }
+esp_err_t aes70_identify_set(aes70_object_handle_t obj, bool active) { return set_num(obj, active ? 1 : 0); }

@@ -67,8 +67,14 @@ typedef enum {
     AES70_K_FLOAT32,
     AES70_K_STRING,
     AES70_K_LEVEL_SENSOR,
+    AES70_K_TEMPERATURE,      /* OcaTemperatureSensor (read-only, deg C) */
+    AES70_K_FREQUENCY,        /* OcaFrequencyActuator (Hz) */
+    AES70_K_IDENTIFY,         /* OcaIdentificationActuator (identify on/off) */
     AES70_K_DYNAMICS,         /* OcaDynamics (compressor/limiter/expander/gate) */
     AES70_K_FILTER_CLASSICAL, /* OcaFilterClassical (crossover/filter) */
+    AES70_K_FILTER_PARAMETRIC,/* OcaFilterParametric (parametric EQ band) */
+    AES70_K_PANBALANCE,       /* OcaPanBalance */
+    AES70_K_SIGNAL_GEN,       /* OcaSignalGenerator */
     AES70_K_DEVICE_MANAGER,
     AES70_K_SUBSCRIPTION_MANAGER,
     AES70_K_COUNT
@@ -248,10 +254,20 @@ aes70_status_t aes70_root_dispatch(struct aes70_object *obj, uint16_t idx,
 aes70_status_t aes70_worker_dispatch(struct aes70_object *obj, uint16_t idx,
                                      ocp1_rd_t *in, ocp1_wr_t *out, uint8_t *pc);
 
+/* ---- Identification actuator (aes70_classes.c) -------------------------- */
+aes70_status_t aes70_identify_dispatch(struct aes70_object *obj, uint16_t idx,
+                                       ocp1_rd_t *in, ocp1_wr_t *out, uint8_t *pc);
+
 /* ---- Dedicated DSP classes (aes70_dsp.c) -------------------------------- */
 aes70_status_t aes70_dynamics_dispatch(struct aes70_object *obj, uint16_t idx,
                                        ocp1_rd_t *in, ocp1_wr_t *out, uint8_t *pc);
 aes70_status_t aes70_filter_dispatch(struct aes70_object *obj, uint16_t idx,
+                                     ocp1_rd_t *in, ocp1_wr_t *out, uint8_t *pc);
+aes70_status_t aes70_peq_dispatch(struct aes70_object *obj, uint16_t idx,
+                                  ocp1_rd_t *in, ocp1_wr_t *out, uint8_t *pc);
+aes70_status_t aes70_pan_dispatch(struct aes70_object *obj, uint16_t idx,
+                                  ocp1_rd_t *in, ocp1_wr_t *out, uint8_t *pc);
+aes70_status_t aes70_siggen_dispatch(struct aes70_object *obj, uint16_t idx,
                                      ocp1_rd_t *in, ocp1_wr_t *out, uint8_t *pc);
 bool aes70_dsp_is_dsp_kind(aes70_kind_t kind);
 void aes70_dsp_init(struct aes70_object *obj);    /* allocate obj->priv */
