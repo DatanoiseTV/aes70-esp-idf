@@ -245,10 +245,14 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    /* Internal temperature sensor (drives OcaTemperatureSensor). */
-    temperature_sensor_config_t tcfg = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 110);
+    /* Internal temperature sensor (drives OcaTemperatureSensor). The min/max
+     * must fall within one of the sensor's predefined measurement ranges;
+     * -10..80 C covers normal chip operating temperature. */
+    temperature_sensor_config_t tcfg = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
     if (temperature_sensor_install(&tcfg, &s_tsens) == ESP_OK) {
         temperature_sensor_enable(s_tsens);
+    } else {
+        ESP_LOGW(TAG, "temperature sensor unavailable; ChipTemp will read static");
     }
 
     /* Bring up the network via the standard example helper. */
