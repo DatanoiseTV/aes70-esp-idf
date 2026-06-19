@@ -321,6 +321,8 @@ static const aes70_method_fn lv_switch[]  = { aes70_root_dispatch, aes70_worker_
 static const aes70_method_fn lv_delay[]   = { aes70_root_dispatch, aes70_worker_dispatch, NULL, delay_dispatch };
 static const aes70_method_fn lv_basic[]   = { aes70_root_dispatch, aes70_worker_dispatch, NULL, NULL, basic_actuator_dispatch };
 static const aes70_method_fn lv_level[]   = { aes70_root_dispatch, aes70_worker_dispatch, sensor_dispatch, level_sensor_dispatch };
+static const aes70_method_fn lv_dynamics[] = { aes70_root_dispatch, aes70_worker_dispatch, NULL, aes70_dynamics_dispatch };
+static const aes70_method_fn lv_filter[]  = { aes70_root_dispatch, aes70_worker_dispatch, NULL, aes70_filter_dispatch };
 static const aes70_method_fn lv_devmgr[]  = { aes70_root_dispatch, NULL, aes70_devmgr_dispatch };
 static const aes70_method_fn lv_submgr[]  = { aes70_root_dispatch, NULL, aes70_submgr_dispatch };
 
@@ -336,9 +338,11 @@ static const uint16_t cid_uint16[]  = { 1, 1, 1, 1, 7 };
 static const uint16_t cid_uint32[]  = { 1, 1, 1, 1, 8 };
 static const uint16_t cid_float32[] = { 1, 1, 1, 1, 10 };
 static const uint16_t cid_string[]  = { 1, 1, 1, 1, 12 };
-static const uint16_t cid_level[]   = { 1, 1, 2, 2 };
-static const uint16_t cid_devmgr[]  = { 1, 3, 1 };
-static const uint16_t cid_submgr[]  = { 1, 3, 4 };
+static const uint16_t cid_level[]    = { 1, 1, 2, 2 };
+static const uint16_t cid_dynamics[] = { 1, 1, 1, 14 };
+static const uint16_t cid_filter[]   = { 1, 1, 1, 9 };
+static const uint16_t cid_devmgr[]   = { 1, 3, 1 };
+static const uint16_t cid_submgr[]   = { 1, 3, 4 };
 
 static const aes70_class_desc_t k_desc[AES70_K_COUNT] = {
     [AES70_K_BLOCK]      = { cid_block,   3, 3, lv_block,  "OcaBlock" },
@@ -354,6 +358,8 @@ static const aes70_class_desc_t k_desc[AES70_K_COUNT] = {
     [AES70_K_FLOAT32]    = { cid_float32, 5, 3, lv_basic,  "OcaFloat32Actuator" },
     [AES70_K_STRING]     = { cid_string,  5, 3, lv_basic,  "OcaStringActuator" },
     [AES70_K_LEVEL_SENSOR] = { cid_level, 4, 3, lv_level,  "OcaLevelSensor" },
+    [AES70_K_DYNAMICS]     = { cid_dynamics, 4, 3, lv_dynamics, "OcaDynamics" },
+    [AES70_K_FILTER_CLASSICAL] = { cid_filter, 4, 3, lv_filter, "OcaFilterClassical" },
     [AES70_K_DEVICE_MANAGER]       = { cid_devmgr, 3, 3, lv_devmgr, "OcaDeviceManager" },
     [AES70_K_SUBSCRIPTION_MANAGER] = { cid_submgr, 3, 4, lv_submgr, "OcaSubscriptionManager" },
 };

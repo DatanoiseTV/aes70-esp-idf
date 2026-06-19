@@ -67,6 +67,8 @@ typedef enum {
     AES70_K_FLOAT32,
     AES70_K_STRING,
     AES70_K_LEVEL_SENSOR,
+    AES70_K_DYNAMICS,         /* OcaDynamics (compressor/limiter/expander/gate) */
+    AES70_K_FILTER_CLASSICAL, /* OcaFilterClassical (crossover/filter) */
     AES70_K_DEVICE_MANAGER,
     AES70_K_SUBSCRIPTION_MANAGER,
     AES70_K_COUNT
@@ -106,6 +108,10 @@ struct aes70_object {
     struct aes70_object **children;
     uint16_t         child_count;
     uint16_t         child_cap;
+
+    /* Multi-parameter classes (OcaDynamics, OcaFilterClassical) keep their state
+     * in a class-specific struct allocated here. NULL for scalar classes. */
+    void            *priv;
 };
 
 /* ---- Class descriptor (drives dispatch + GetClassIdentification) -------- */
@@ -154,8 +160,10 @@ typedef struct {
 /* ---- Application -> task value-set request ------------------------------ */
 typedef struct {
     uint32_t ono;
+    uint8_t  sel;        /* parameter selector for multi-parameter classes (0 = scalar) */
     bool     is_string;
     double   num;
+    double   num2;       /* second value (e.g. OcaDBr reference) */
     char     str[96];
 } aes70_set_req_t;
 
@@ -239,6 +247,18 @@ aes70_status_t aes70_root_dispatch(struct aes70_object *obj, uint16_t idx,
                                    ocp1_rd_t *in, ocp1_wr_t *out, uint8_t *pc);
 aes70_status_t aes70_worker_dispatch(struct aes70_object *obj, uint16_t idx,
                                      ocp1_rd_t *in, ocp1_wr_t *out, uint8_t *pc);
+
+/* ---- Dedicated DSP classes (aes70_dsp.c) -------------------------------- */
+aes70_status_t aes70_dynamics_dispatch(struct aes70_object *obj, uint16_t idx,
+                                       ocp1_rd_t *in, ocp1_wr_t *out, uint8_t *pc);
+aes70_status_t aes70_filter_dispatch(struct aes70_object *obj, uint16_t idx,
+                                     ocp1_rd_t *in, ocp1_wr_t *out, uint8_t *pc);
+bool aes70_dsp_is_dsp_kind(aes70_kind_t kind);
+void aes70_dsp_init(struct aes70_object *obj);    /* allocate obj->priv */
+void aes70_dsp_free(struct aes70_object *obj);     /* free obj->priv */
+bool aes70_dsp_encode_property(struct aes70_object *obj, uint16_t level, uint16_t index,
+                               ocp1_wr_t *out);
+void aes70_dsp_apply_set(struct aes70_object *obj, const aes70_set_req_t *req);
 
 /* ---- Command routing (aes70_device.c) ----------------------------------- */
 /* Process an inbound Cmd/CmdRrq PDU body; if RRQ, build the response PDU into

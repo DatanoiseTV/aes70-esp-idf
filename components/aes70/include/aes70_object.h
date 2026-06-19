@@ -27,6 +27,12 @@
  *   OcaFloat32Actuator  1.1.1.1.10   arbitrary float parameter (threshold, Hz, Q, ms)
  *   OcaStringActuator   1.1.1.1.12   arbitrary string parameter
  *   OcaLevelSensor      1.1.2.2      dB level meter (read-only, device reports)
+ *   OcaDynamics         1.1.1.14     compressor/limiter/expander/gate (one object)
+ *   OcaFilterClassical  1.1.1.9      crossover/filter (frequency/shape/order)
+ *
+ * The OcaDynamics and OcaFilterClassical classes carry many parameters in a
+ * single object, and AES70 controllers render purpose-built widgets for them
+ * (e.g. a compressor panel), so prefer them over a block of generic actuators.
  *
  * SPDX-License-Identifier: MIT
  */
@@ -144,6 +150,39 @@ aes70_object_handle_t aes70_level_sensor_create(aes70_device_handle_t dev,
                                                 aes70_object_handle_t parent, const char *role,
                                                 float min_db, float max_db);
 esp_err_t aes70_level_sensor_report(aes70_object_handle_t obj, float db);
+
+/* ---- OcaDynamics (compressor / limiter / expander / gate) ---------------- *
+ * One object exposes Function, Threshold (dB), Ratio/Slope, Attack, Release,
+ * Hold, Knee, gain floor/ceiling, DetectorLaw, plus read-only Triggered and
+ * DynamicGain telemetry. `function` is an aes70_dynamics_function_t. */
+aes70_object_handle_t aes70_dynamics_create(aes70_device_handle_t dev, aes70_object_handle_t parent,
+                                            const char *role, uint8_t function);
+uint8_t   aes70_dynamics_get_function(aes70_object_handle_t obj);
+float     aes70_dynamics_get_threshold(aes70_object_handle_t obj);  /* dB */
+float     aes70_dynamics_get_ratio(aes70_object_handle_t obj);
+float     aes70_dynamics_get_attack(aes70_object_handle_t obj);     /* seconds */
+float     aes70_dynamics_get_release(aes70_object_handle_t obj);    /* seconds */
+esp_err_t aes70_dynamics_set_function(aes70_object_handle_t obj, uint8_t function);
+esp_err_t aes70_dynamics_set_threshold(aes70_object_handle_t obj, float db);
+esp_err_t aes70_dynamics_set_ratio(aes70_object_handle_t obj, float ratio);
+esp_err_t aes70_dynamics_set_attack(aes70_object_handle_t obj, float seconds);
+esp_err_t aes70_dynamics_set_release(aes70_object_handle_t obj, float seconds);
+/* Report live gain-reduction telemetry to subscribed controllers (rate-limit). */
+esp_err_t aes70_dynamics_report_gain(aes70_object_handle_t obj, float gain_db, bool triggered);
+
+/* ---- OcaFilterClassical (crossover / filter) ---------------------------- *
+ * `passband` is an aes70_filter_passband_t, `shape` an aes70_filter_shape_t. */
+aes70_object_handle_t aes70_filter_create(aes70_device_handle_t dev, aes70_object_handle_t parent,
+                                          const char *role, uint8_t passband, uint8_t shape,
+                                          float frequency, uint16_t order);
+float     aes70_filter_get_frequency(aes70_object_handle_t obj);
+uint8_t   aes70_filter_get_passband(aes70_object_handle_t obj);
+uint8_t   aes70_filter_get_shape(aes70_object_handle_t obj);
+uint16_t  aes70_filter_get_order(aes70_object_handle_t obj);
+esp_err_t aes70_filter_set_frequency(aes70_object_handle_t obj, float hz);
+esp_err_t aes70_filter_set_passband(aes70_object_handle_t obj, uint8_t passband);
+esp_err_t aes70_filter_set_shape(aes70_object_handle_t obj, uint8_t shape);
+esp_err_t aes70_filter_set_order(aes70_object_handle_t obj, uint16_t order);
 
 #ifdef __cplusplus
 }

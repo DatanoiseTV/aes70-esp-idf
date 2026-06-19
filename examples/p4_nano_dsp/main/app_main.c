@@ -6,13 +6,15 @@
  * discover over mDNS and operate:
  *
  *   Root
- *   |- Master      : OcaGain, OcaMute, OcaPolarity, OcaLevelSensor (output meter)
+ *   |- Master      : OcaGain, OcaMute, OcaPolarity, OcaDelay, OcaLevelSensor (meter)
  *   |- GraphicEQ   : OcaBooleanActuator (bypass) + 10 OcaGain bands
- *   |- Compressor  : threshold/ratio/attack/release (OcaFloat32Actuator),
- *   |                makeup (OcaGain), bypass (OcaBooleanActuator)
- *   |- Limiter     : threshold/release (OcaFloat32Actuator), bypass
- *   `- Crossover   : frequency (OcaFloat32Actuator), slope (OcaSwitch),
- *                    Low/High sub-blocks each with OcaGain + OcaMute
+ *   |- Compressor  : OcaDynamics (compressor), makeup OcaGain, bypass
+ *   |- Limiter     : OcaDynamics (limiter), bypass
+ *   `- Crossover   : Low/High sub-blocks, each an OcaFilterClassical + OcaGain + OcaMute
+ *
+ * The compressor and limiter are single OcaDynamics objects and the crossover
+ * bands are OcaFilterClassical objects, so an AES70 controller shows dedicated
+ * compressor / filter widgets rather than rows of generic sliders.
  *
  * When a controller writes a value, on_control_changed() is invoked; a real
  * product would forward the new value to its DSP there. The demo also streams a
@@ -46,7 +48,10 @@ static aes70_object_handle_t s_meter;
  * A tiny registry maps each object handle to a name + value type so the demo
  * can print human-readable updates. A real product would instead map the
  * object (or its tag) to a DSP parameter. */
-enum { T_GAIN = 1, T_FLOAT, T_MUTE, T_BOOL, T_POLARITY, T_SWITCH, T_DELAY };
+enum { T_GAIN = 1, T_FLOAT, T_MUTE, T_BOOL, T_POLARITY, T_SWITCH, T_DELAY,
+       T_DYNAMICS, T_FILTER };
+
+static aes70_object_handle_t s_compressor;   /* fed synthetic gain-reduction telemetry */
 
 typedef struct { aes70_object_handle_t h; char name[28]; int type; } demo_param_t;
 static demo_param_t s_params[64];
@@ -81,6 +86,17 @@ static void on_control_changed(aes70_object_handle_t obj, uint32_t tag, void *us
     case T_POLARITY: ESP_LOGI(TAG, "%-16s = %s",       n, aes70_polarity_get(obj) ? "inverted" : "normal"); break;
     case T_SWITCH:   ESP_LOGI(TAG, "%-16s = position %u", n, aes70_switch_get(obj)); break;
     case T_DELAY:    ESP_LOGI(TAG, "%-16s = %.3f ms",  n, aes70_delay_get(obj) * 1000.0); break;
+    case T_DYNAMICS:
+        ESP_LOGI(TAG, "%-16s = func %u, thr %.1f dB, ratio %.1f, atk %.1f ms, rel %.0f ms", n,
+                 aes70_dynamics_get_function(obj), aes70_dynamics_get_threshold(obj),
+                 aes70_dynamics_get_ratio(obj), aes70_dynamics_get_attack(obj) * 1000.0f,
+                 aes70_dynamics_get_release(obj) * 1000.0f);
+        break;
+    case T_FILTER:
+        ESP_LOGI(TAG, "%-16s = %.0f Hz, passband %u, shape %u, order %u", n,
+                 aes70_filter_get_frequency(obj), aes70_filter_get_passband(obj),
+                 aes70_filter_get_shape(obj), aes70_filter_get_order(obj));
+        break;
     default: break;
     }
     /* TODO (product): push the new value into the DSP for `obj` here. */
@@ -115,30 +131,30 @@ static void build_dsp_tree(aes70_device_handle_t dev)
         track(aes70_gain_create(dev, eq, role, -12.0f, 12.0f, 0.0f), name, T_GAIN);
     }
 
-    /* Compressor. */
+    /* Compressor: one OcaDynamics object (controllers render a compressor
+     * widget) plus a makeup OcaGain and a bypass toggle alongside it. */
     aes70_object_handle_t comp = aes70_block_create(dev, NULL, "Compressor");
-    track(aes70_float_create(dev, comp, "Threshold", -60.0f, 0.0f, -18.0f), "Comp Threshold", T_FLOAT);
-    track(aes70_float_create(dev, comp, "Ratio", 1.0f, 20.0f, 4.0f),        "Comp Ratio", T_FLOAT);
-    track(aes70_float_create(dev, comp, "AttackMs", 0.1f, 100.0f, 10.0f),   "Comp Attack", T_FLOAT);
-    track(aes70_float_create(dev, comp, "ReleaseMs", 10.0f, 1000.0f, 100.0f), "Comp Release", T_FLOAT);
-    track(aes70_gain_create(dev, comp, "MakeupGain", -6.0f, 24.0f, 0.0f),   "Comp Makeup", T_GAIN);
-    track(aes70_boolean_create(dev, comp, "Bypass", false),                 "Comp Bypass", T_BOOL);
+    s_compressor = track(aes70_dynamics_create(dev, comp, "Dynamics", AES70_DYN_COMPRESS),
+                         "Compressor", T_DYNAMICS);
+    track(aes70_gain_create(dev, comp, "MakeupGain", -6.0f, 24.0f, 0.0f), "Comp Makeup", T_GAIN);
+    track(aes70_boolean_create(dev, comp, "Bypass", false),               "Comp Bypass", T_BOOL);
 
-    /* Limiter. */
+    /* Limiter: an OcaDynamics configured as a limiter. */
     aes70_object_handle_t lim = aes70_block_create(dev, NULL, "Limiter");
-    track(aes70_float_create(dev, lim, "Threshold", -30.0f, 0.0f, -1.0f),   "Lim Threshold", T_FLOAT);
-    track(aes70_float_create(dev, lim, "ReleaseMs", 1.0f, 500.0f, 50.0f),   "Lim Release", T_FLOAT);
-    track(aes70_boolean_create(dev, lim, "Bypass", false),                  "Lim Bypass", T_BOOL);
+    track(aes70_dynamics_create(dev, lim, "Dynamics", AES70_DYN_LIMIT), "Limiter", T_DYNAMICS);
+    track(aes70_boolean_create(dev, lim, "Bypass", false),             "Lim Bypass", T_BOOL);
 
-    /* 2-way crossover. */
+    /* 2-way crossover: an OcaFilterClassical per band (Linkwitz-Riley) plus a
+     * band OcaGain and OcaMute. */
     aes70_object_handle_t xover = aes70_block_create(dev, NULL, "Crossover");
-    static const char *const slopes[] = { "12 dB/oct", "24 dB/oct", "48 dB/oct" };
-    track(aes70_float_create(dev, xover, "Frequency", 20.0f, 20000.0f, 2000.0f), "Xover Freq", T_FLOAT);
-    track(aes70_switch_create(dev, xover, "Slope", slopes, 3, 1), "Xover Slope", T_SWITCH);
     aes70_object_handle_t low = aes70_block_create(dev, xover, "LowBand");
+    track(aes70_filter_create(dev, low, "LowPass", AES70_PASSBAND_LOWPASS,
+                              AES70_FILTER_LINKWITZ_RILEY, 2000.0f, 4), "Low XO Filter", T_FILTER);
     track(aes70_gain_create(dev, low, "Gain", -24.0f, 6.0f, 0.0f), "Low Gain", T_GAIN);
     track(aes70_mute_create(dev, low, "Mute", false),              "Low Mute", T_MUTE);
     aes70_object_handle_t high = aes70_block_create(dev, xover, "HighBand");
+    track(aes70_filter_create(dev, high, "HighPass", AES70_PASSBAND_HIPASS,
+                              AES70_FILTER_LINKWITZ_RILEY, 2000.0f, 4), "High XO Filter", T_FILTER);
     track(aes70_gain_create(dev, high, "Gain", -24.0f, 6.0f, 0.0f), "High Gain", T_GAIN);
     track(aes70_mute_create(dev, high, "Mute", false),             "High Mute", T_MUTE);
 
@@ -151,9 +167,11 @@ static void meter_task(void *arg)
 {
     int v = 0, dir = 1;
     for (;;) {
-        if (s_meter) {
-            float db = -60.0f + (float)v * 0.6f;   /* triangle sweep -60..0 dB */
-            aes70_level_sensor_report(s_meter, db);
+        float db = -60.0f + (float)v * 0.6f;       /* triangle sweep -60..0 dB */
+        if (s_meter) aes70_level_sensor_report(s_meter, db);
+        if (s_compressor) {                        /* synthetic gain reduction above -20 dB */
+            float gr = db > -20.0f ? -(db + 20.0f) * 0.5f : 0.0f;
+            aes70_dynamics_report_gain(s_compressor, gr, gr < -0.1f);
         }
         v += dir;
         if (v >= 100) dir = -1; else if (v <= 0) dir = 1;

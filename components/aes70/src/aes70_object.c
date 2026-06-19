@@ -71,6 +71,7 @@ void aes70_object_free(struct aes70_object *obj)
     free(obj->label);
     free(obj->str);
     free(obj->children);
+    free(obj->priv);
     if (obj->sw_names) {
         for (uint16_t i = 0; i < obj->sw_count; i++) free(obj->sw_names[i]);
         free(obj->sw_names);
@@ -168,6 +169,11 @@ bool aes70_object_encode_property(struct aes70_object *obj, uint16_t level, uint
         if (level == 3 && index == 6) { ocp1_wr_string(out, obj->dev->device_role); return true; }
     }
 
+    /* Multi-parameter DSP classes encode their own level-4 properties. */
+    if (aes70_dsp_is_dsp_kind(obj->kind) && aes70_dsp_encode_property(obj, level, index, out)) {
+        return true;
+    }
+
     /* The class's primary value property. */
     uint16_t pl, pi;
     if (primary_property(obj, &pl, &pi) && level == pl && index == pi) {
@@ -215,6 +221,11 @@ void aes70_object_apply_set(aes70_device_t *dev, const aes70_set_req_t *req)
 {
     struct aes70_object *obj = aes70_device_find(dev, req->ono);
     if (!obj) return;
+
+    if (aes70_dsp_is_dsp_kind(obj->kind)) {
+        aes70_dsp_apply_set(obj, req);
+        return;
+    }
 
     uint16_t pl, pi;
     if (!primary_property(obj, &pl, &pi)) return;

@@ -67,6 +67,46 @@ typedef enum {
 /* OcaDB - gain / level in decibels, an IEEE-754 float32 on the wire. */
 typedef float aes70_db_t;
 
+/* ---- OcaDynamics function (compressor / limiter / expander / gate) ------- */
+typedef enum {
+    AES70_DYN_NONE     = 0,
+    AES70_DYN_COMPRESS = 1,
+    AES70_DYN_LIMIT    = 2,
+    AES70_DYN_EXPAND   = 3,
+    AES70_DYN_GATE     = 4,
+} aes70_dynamics_function_t;
+
+/* ---- OcaLevelDetectionLaw ------------------------------------------------ */
+typedef enum {
+    AES70_DETECT_NONE = 0,
+    AES70_DETECT_RMS  = 1,
+    AES70_DETECT_PEAK = 2,
+} aes70_detection_law_t;
+
+/* ---- OcaPresentationUnit ------------------------------------------------- */
+typedef enum {
+    AES70_UNIT_DBU = 0,
+    AES70_UNIT_DBV = 1,
+    AES70_UNIT_V   = 2,
+} aes70_presentation_unit_t;
+
+/* ---- OcaFilterPassband --------------------------------------------------- */
+typedef enum {
+    AES70_PASSBAND_HIPASS     = 1,
+    AES70_PASSBAND_LOWPASS    = 2,
+    AES70_PASSBAND_BANDPASS   = 3,
+    AES70_PASSBAND_BANDREJECT = 4,
+    AES70_PASSBAND_ALLPASS    = 5,
+} aes70_filter_passband_t;
+
+/* ---- OcaClassicalFilterShape --------------------------------------------- */
+typedef enum {
+    AES70_FILTER_BUTTERWORTH    = 1,
+    AES70_FILTER_BESSEL         = 2,
+    AES70_FILTER_CHEBYSHEV      = 3,
+    AES70_FILTER_LINKWITZ_RILEY = 4,
+} aes70_filter_shape_t;
+
 /* ---- Reserved object numbers (AES70-2) ----------------------------------- *
  * Managers occupy the low ONos; the device root block is conventionally 100;  *
  * application objects are assigned from AES70_ONO_APP_BASE upward.            */
