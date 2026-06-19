@@ -20,7 +20,13 @@ adheres to [Semantic Versioning](https://semver.org/).
   (`GetActionObjects`/`GetActionObjectsRecursive`).
 - **Control classes**: OcaBlock, OcaGain, OcaMute, OcaPolarity, OcaSwitch,
   OcaDelay, OcaBooleanActuator, OcaInt32/Uint16/Uint32/Float32/StringActuator,
-  OcaLevelSensor.
+  OcaLevelSensor, OcaTemperatureSensor, OcaFrequencyActuator,
+  OcaIdentificationActuator.
+- **Dedicated multi-parameter classes** (controllers render purpose-built
+  widgets): OcaDynamics (compressor/limiter/expander/gate), OcaFilterClassical
+  (crossover), OcaFilterParametric (parametric EQ band), OcaPanBalance,
+  OcaSignalGenerator. A multiband compressor is modelled as a block of per-band
+  OcaFilterClassical + OcaDynamics.
 - **Managers**: OcaDeviceManager (identity, model description, manager list) and
   OcaSubscriptionManager (EV1 + EV2 subscriptions, notification enable/disable).
 - **Live PropertyChanged notifications** delivered as OCP.1 Notifications to

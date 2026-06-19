@@ -8,9 +8,10 @@ Responses, emits PropertyChanged Notifications to subscribed controllers, and
 advertises itself over mDNS so controllers such as **AES70 Explorer** discover
 it automatically.
 
-It is built for DSP devices: the included example exposes a graphic EQ,
-compressor, limiter and crossover as standard OCA control objects that any
-AES70 controller can operate, with no controller-specific code on the device.
+It is built for DSP devices: the included example exposes a parametric EQ,
+compressor, multiband compressor, limiter, crossover and signal generator as
+standard OCA control objects that any AES70 controller can operate, with no
+controller-specific code on the device.
 
 The component is **target-agnostic** — it uses only BSD sockets, `esp_netif`
 and the `espressif/mdns` component — so it runs on any ESP-IDF chip with a
@@ -82,10 +83,22 @@ recommended next check.
 | OcaLevelSensor | 1.1.2.2 | dB level meter (device reports) |
 | OcaDynamics | 1.1.1.14 | compressor / limiter / expander / gate (single object) |
 | OcaFilterClassical | 1.1.1.9 | crossover / filter (frequency, shape, order) |
+| OcaFilterParametric | 1.1.1.10 | parametric EQ band (frequency, gain, Q, shape) |
+| OcaPanBalance | 1.1.1.6 | pan / balance |
+| OcaSignalGenerator | 1.1.1.17 | test signal (waveform, frequency, level, sweep) |
+| OcaFrequencyActuator | 1.1.1.8 | frequency parameter (Hz) |
+| OcaTemperatureSensor | 1.1.2.5 | temperature reading (device reports) |
+| OcaIdentificationActuator | 1.1.1.21 | identify (locate the device) |
 
-`OcaDynamics` and `OcaFilterClassical` carry their whole parameter set in one
-object, so a controller renders a purpose-built compressor or filter widget
+`OcaDynamics`, `OcaFilterClassical`, `OcaFilterParametric`, `OcaPanBalance` and
+`OcaSignalGenerator` carry their whole parameter set in one object, so a
+controller renders a purpose-built compressor / filter / EQ / generator widget
 rather than a row of generic sliders. Prefer them for those functions.
+
+There is no monolithic "multiband compressor" class — the idiomatic model is an
+OcaBlock per band, each holding an `OcaFilterClassical` split and an
+`OcaDynamics`; controllers show that as a band of compressor widgets (the
+example builds a 3-band one).
 
 **Managers**
 
@@ -186,8 +199,11 @@ than touching the tree directly.
 
 ## Example: `examples/p4_nano_dsp`
 
-A generic DSP device — master section, 10-band graphic EQ, compressor, limiter
-and 2-way crossover — built entirely from standard OCA objects. It contains no
+A generic full-blown DSP device, built entirely from standard OCA objects (50
+of them across 14 classes): a master section (gain/mute/polarity/pan/delay/
+output meter), a signal generator, a 4-band parametric EQ, a compressor, a
+3-band multiband compressor, a limiter, a 2-way crossover, and a system block
+with a live chip-temperature sensor and an identify button. It contains no
 product-specific internals; it is a template for wiring real DSP parameters to
 OCA objects.
 
