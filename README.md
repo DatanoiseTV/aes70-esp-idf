@@ -80,6 +80,12 @@ recommended next check.
 | OcaFloat32Actuator | 1.1.1.1.10 | arbitrary float parameter |
 | OcaStringActuator | 1.1.1.1.12 | arbitrary string parameter |
 | OcaLevelSensor | 1.1.2.2 | dB level meter (device reports) |
+| OcaDynamics | 1.1.1.14 | compressor / limiter / expander / gate (single object) |
+| OcaFilterClassical | 1.1.1.9 | crossover / filter (frequency, shape, order) |
+
+`OcaDynamics` and `OcaFilterClassical` carry their whole parameter set in one
+object, so a controller renders a purpose-built compressor or filter widget
+rather than a row of generic sliders. Prefer them for those functions.
 
 **Managers**
 
