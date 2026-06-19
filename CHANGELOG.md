@@ -35,6 +35,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 - Builds clean (no warnings) on ESP-IDF v6.0 for esp32p4.
 - Wire format cross-checked against the Wireshark OCP.1 dissector and the AES70-2
   class definitions.
+- Exercised end-to-end on an ESP32-P4-Nano (rev v1.3) over Ethernet with
+  `tools/ocp1_smoketest.py`: identity, recursive tree enumeration, gain
+  get/set with range checking, error status codes, and subscription →
+  PropertyChanged notification all pass.
 
 ### Known limitations
 
@@ -42,4 +46,5 @@ adheres to [Semantic Versioning](https://semver.org/).
   reconfigurable-DSP construction, firmware-update manager, OCP.1-over-TLS and
   OCP.1 authentication are not yet implemented (documented extension points).
 - The server listens on IPv4 only.
-- On-hardware interop with AES70 Explorer is not yet confirmed.
+- GUI interop with AES70 Explorer not yet exercised (the underlying OCP.1
+  protocol is verified on hardware).

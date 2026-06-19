@@ -24,9 +24,25 @@ Ethernet and builds unchanged for the ESP32-S3, ESP32, ESP32-C6 and others.
 | Builds (ESP-IDF v6.0, esp32p4) | yes — clean, no warnings |
 | Wire format | byte-exact against the Wireshark OCP.1 dissector and the AES70-2 class definitions (docs.deuso.de); see "Protocol fidelity" below |
 | Object model | OcaRoot/OcaWorker locking, GetClassIdentification, block enumeration, EV1/EV2 subscriptions and live PropertyChanged notifications |
-| Live controller interop | pending on-hardware confirmation with AES70 Explorer |
+| On-hardware OCP.1 round-trip | verified on an ESP32-P4-Nano over Ethernet (see below) |
 
 This is a `0.x` release: the public API may still change before `1.0.0`.
+
+The protocol was exercised end-to-end against the example running on a real
+ESP32-P4-Nano (rev v1.3) over its on-board Ethernet, using the
+[`tools/ocp1_smoketest.py`](tools/ocp1_smoketest.py) OCP.1 controller:
+device identity (GetDeviceName / GetModelDescription), root-block
+`GetClassIdentification`, recursive object-tree enumeration (all 38 demo
+objects), `GetGain`/`SetGain` round-trip with range checking, `BadONo` handling,
+and an `AddSubscription` → `SetGain` → PropertyChanged notification round-trip
+all pass. Run it yourself against your device:
+
+```bash
+python3 tools/ocp1_smoketest.py <device-ip> 65000
+```
+
+GUI interop with AES70 Explorer (which speaks the same OCP.1 protocol) is the
+recommended next check.
 
 ## What is implemented
 
@@ -102,8 +118,11 @@ the Command/Response/Notification layouts, the KeepAlive heartbeat encoding, and
 the EV1 PropertyChanged notification body (Context blob followed by emitter +
 event id + property id + value + change type) all follow those sources.
 
-On-hardware confirmation against AES70 Explorer is the remaining validation step
-(see the example below).
+Beyond the source cross-check, the framing and class behaviour were confirmed
+on real hardware with an OCP.1 controller (`tools/ocp1_smoketest.py`): every
+field the device emits — header sizes, inclusive per-message sizes, ClassID /
+ClassIdentification, OcaObjectIdentification / OcaBlockMember, float32 values and
+the PropertyChanged notification body — round-trips correctly.
 
 ## Using the component
 

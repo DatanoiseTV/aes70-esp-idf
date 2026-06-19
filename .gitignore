@@ -10,3 +10,6 @@ dependencies.lock
 *.swp
 compile_commands.json
 .cache/
+
+# Logs
+*.log
