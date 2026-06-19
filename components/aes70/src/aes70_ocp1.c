@@ -8,23 +8,32 @@
  */
 #include "aes70_ocp1.h"
 
+/* OcaString length prefix is a CODEPOINT count (not a byte count); the data is
+ * the UTF-8 bytes of those codepoints (AES70.js OcaString.js). Walk the lead
+ * bytes to recover the byte length. */
 size_t ocp1_rd_string(ocp1_rd_t *r, char *dst, size_t cap)
 {
-    uint16_t n = ocp1_rd_u16(r);
-    if (!ocp1_rd_need(r, n)) {           /* declared length exceeds the buffer */
-        if (cap) dst[0] = '\0';
-        return 0;
+    uint16_t cps = ocp1_rd_u16(r);
+    if (r->err) { if (cap) dst[0] = '\0'; return 0; }
+
+    const uint8_t *p = r->p + r->off;
+    size_t avail = ocp1_rd_remaining(r);
+    size_t bytes = 0;
+    for (uint16_t c = 0; c < cps; c++) {
+        if (bytes >= avail) { r->err = true; break; }
+        uint8_t lead = p[bytes];
+        size_t seq = lead < 0x80 ? 1 : lead < 0xE0 ? 2 : lead < 0xF0 ? 3 : 4;
+        bytes += seq;
     }
-    size_t copy = n;
-    if (cap == 0) {                      /* nothing to copy into */
-        r->off += n;
-        return n;
+    if (r->err || bytes > avail) { r->err = true; if (cap) dst[0] = '\0'; return 0; }
+
+    if (cap) {
+        size_t copy = bytes < cap ? bytes : cap - 1;
+        memcpy(dst, p, copy);
+        dst[copy] = '\0';
     }
-    if (copy > cap - 1) copy = cap - 1;
-    memcpy(dst, r->p + r->off, copy);
-    dst[copy] = '\0';
-    r->off += n;                         /* always consume the full field */
-    return n;
+    r->off += bytes;                     /* always consume the full field */
+    return bytes;
 }
 
 const uint8_t *ocp1_rd_blob(ocp1_rd_t *r, uint16_t *out_len)
@@ -39,10 +48,16 @@ const uint8_t *ocp1_rd_blob(ocp1_rd_t *r, uint16_t *out_len)
 
 void ocp1_wr_string(ocp1_wr_t *w, const char *s)
 {
-    size_t n = s ? strlen(s) : 0;
-    if (n > 0xFFFF) n = 0xFFFF;          /* OcaString length is a u16 */
-    ocp1_wr_u16(w, (uint16_t)n);
-    ocp1_wr_bytes(w, s, n);
+    size_t bytes = s ? strlen(s) : 0;
+    /* OcaString prefix is the codepoint count = bytes that are not UTF-8
+     * continuation bytes (0b10xxxxxx). Equal to `bytes` for ASCII. */
+    size_t cps = 0;
+    for (size_t i = 0; i < bytes; i++) {
+        if (((uint8_t)s[i] & 0xC0) != 0x80) cps++;
+    }
+    if (cps > 0xFFFF) cps = 0xFFFF;
+    ocp1_wr_u16(w, (uint16_t)cps);
+    ocp1_wr_bytes(w, s, bytes);
 }
 
 void ocp1_wr_blob(ocp1_wr_t *w, const void *data, uint16_t len)

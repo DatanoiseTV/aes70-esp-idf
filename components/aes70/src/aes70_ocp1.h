@@ -3,11 +3,14 @@
  *
  * Internal header. The OCP.1 binary protocol frames every PDU as:
  *
- *   [SyncVal 0x3B][ProtocolVersion u16=1][PduSize u32][MsgType u8][MsgCount u16]
+ *   [SyncVal 0x3B][ProtocolVersion u16][PduSize u32][MsgType u8][MsgCount u16]
  *   followed by MsgCount messages, each prefixed with its own inclusive u32 size.
  *
- *   PduSize counts everything after the 3-byte sync+version prefix, i.e.
- *   PduSize = 7 + sum(message bytes); the whole frame on the wire is PduSize + 3.
+ *   PduSize counts every byte after the 1-byte sync value -- it includes the
+ *   protocolVersion and PduSize fields themselves -- i.e. PduSize = 9 +
+ *   sum(message bytes); the whole frame on the wire is PduSize + 1. (Verified
+ *   against AES70.js encode_message.js: messageSize = pos - startPos, where
+ *   startPos is the byte after the sync value.)
  *
  * All multi-byte fields are big-endian (network order). Verified against the
  * Wireshark OCP.1 dissector (epan/dissectors/packet-ocp1.c) and docs.deuso.de.
@@ -27,11 +30,14 @@ extern "C" {
 
 /* ---- Frame constants ---------------------------------------------------- */
 #define OCP1_SYNC_VAL        0x3B
-#define OCP1_PROTO_VERSION   0x0001
+/* AES70-2024 / OCP.1 protocol version (PROTOCOL_VERSION_2024). Controllers
+ * (e.g. AES70 Explorer) emit this and ignore the field on decode. */
+#define OCP1_PROTO_VERSION   0x0004
 #define OCP1_HEADER_LEN      10        /* sync(1)+ver(2)+size(4)+type(1)+count(2) */
 
-/* PduSize covers bytes after the sync+version prefix (3 bytes). */
-#define OCP1_PDUSIZE_PREFIX  3
+/* PduSize counts every byte after the 1-byte sync value (including the
+ * protocolVersion and PduSize fields themselves), so frame length = PduSize+1. */
+#define OCP1_PDUSIZE_PREFIX  1
 
 /* Message (PDU) types. */
 typedef enum {

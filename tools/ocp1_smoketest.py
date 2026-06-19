@@ -45,7 +45,8 @@ class Ocp1:
         sync, ver, pdusize, mtype, mcount = struct.unpack(">BHIBH", self._rxall(10))
         if sync != SYNC:
             raise IOError(f"bad sync byte {sync:#x}")
-        return mtype, self._rxall(pdusize + 3 - 10)
+        # PduSize counts every byte after the 1-byte sync value: frame = PduSize + 1.
+        return mtype, self._rxall(pdusize + 1 - 10)
 
     def call(self, target, level, index, params=b"", pcount=0, notifications=None):
         """Send a command (response required) and return (status, paramCount, payload).
@@ -55,7 +56,8 @@ class Ocp1:
         self.h += 1
         msg = struct.pack(">IIHHB", handle, target, level, index, pcount) + params
         msg = struct.pack(">I", len(msg) + 4) + msg          # commandSize (inclusive)
-        pdu = struct.pack(">BHIBH", SYNC, 1, 7 + len(msg), CMD_RRQ, 1) + msg
+        # PduSize = bytes after the sync value = 9 + message length; version 4 (2024).
+        pdu = struct.pack(">BHIBH", SYNC, 4, 9 + len(msg), CMD_RRQ, 1) + msg
         self.s.sendall(pdu)
         while True:
             mtype, data = self._read_pdu()

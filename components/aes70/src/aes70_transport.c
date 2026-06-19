@@ -45,7 +45,7 @@ static void send_keepalive(aes70_device_t *dev, int conn_idx)
     ocp1_wr_u8(&w, OCP1_SYNC_VAL);
     ocp1_wr_u16(&w, OCP1_PROTO_VERSION);
     uint8_t width = (c->ka_width == 2) ? 2 : 4;
-    ocp1_wr_u32(&w, (uint32_t)(7 + width));        /* PduSize = 7 + payload */
+    ocp1_wr_u32(&w, (uint32_t)(9 + width));        /* PduSize = (header-1) + payload */
     ocp1_wr_u8(&w, OCP1_KEEPALIVE);
     ocp1_wr_u16(&w, 1);                            /* MessageCount */
     if (width == 2) ocp1_wr_u16(&w, (uint16_t)(c->heartbeat_ms / 1000));
