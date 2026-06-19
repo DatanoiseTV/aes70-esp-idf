@@ -1,0 +1,34 @@
+# ESP32-P4-Nano: connect via the on-board Ethernet (IP101 PHY, internal EMAC,
+# RMII). No companion C6 / Wi-Fi needed.
+#
+# example_connect() delegates Ethernet to the espressif/ethernet_init component,
+# which reads CONFIG_ETHERNET_* and assigns every RMII pin from Kconfig. The pin
+# map below is the ESP32-P4-Nano RMII wiring (matches the ESP32-P4 EVB):
+#   MDC=31  MDIO=52  PHY_RST=51  REF_CLK=50 (external 50 MHz, input)
+#   TX_EN=49  TXD0=34  TXD1=35  CRS_DV=28  RXD0=29  RXD1=30   PHY addr=1
+# NOTE: do NOT use the 23/18/5 values from some IP101 sample configs -- those are
+# the classic-ESP32 defaults and are wrong for the ESP32-P4.
+CONFIG_EXAMPLE_CONNECT_ETHERNET=y
+CONFIG_EXAMPLE_CONNECT_WIFI=n
+
+CONFIG_ETHERNET_INTERNAL_SUPPORT=y
+CONFIG_ETHERNET_PHY_IP101=y
+CONFIG_ETHERNET_PHY_ADDR=1
+CONFIG_ETHERNET_PHY_RST_GPIO=51
+CONFIG_ETHERNET_MDC_GPIO=31
+CONFIG_ETHERNET_MDIO_GPIO=52
+CONFIG_ETHERNET_PHY_INTERFACE_RMII=y
+CONFIG_ETHERNET_RMII_CLK_INPUT=y
+CONFIG_ETHERNET_RMII_CLK_GPIO=50
+CONFIG_ETHERNET_RMII_TX_EN_GPIO=49
+CONFIG_ETHERNET_RMII_TXD0_GPIO=34
+CONFIG_ETHERNET_RMII_TXD1_GPIO=35
+CONFIG_ETHERNET_RMII_CRS_DV_GPIO=28
+CONFIG_ETHERNET_RMII_RXD0_GPIO=29
+CONFIG_ETHERNET_RMII_RXD1_GPIO=30
+
+# Early ESP32-P4 silicon (e.g. rev v1.3): IDF v6.0 defaults the minimum chip
+# revision to v3.01 and refuses to boot on v1.x. Select the "<3.0" revision
+# family and set the minimum to v1.0. Remove these two on v3.x production silicon.
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
+CONFIG_ESP32P4_REV_MIN_100=y

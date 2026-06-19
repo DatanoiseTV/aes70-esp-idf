@@ -1,0 +1,24 @@
+menu "AES70 DSP Demo Configuration"
+
+    config AES70_DEMO_DEVICE_NAME
+        string "Device name (shown to controllers and in mDNS)"
+        default "AES70 DSP Demo"
+
+    config AES70_DEMO_MANUFACTURER
+        string "Manufacturer name"
+        default "Example Audio"
+
+    config AES70_DEMO_MODEL
+        string "Model name"
+        default "DSP-1"
+
+    config AES70_DEMO_SERIAL
+        string "Serial number"
+        default "SN-0001"
+
+    config AES70_DEMO_PORT
+        int "OCP.1 TCP port"
+        range 1024 65535
+        default 65000
+
+endmenu

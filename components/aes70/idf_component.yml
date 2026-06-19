@@ -1,0 +1,21 @@
+version: "0.1.0"
+description: >-
+  AES70 (OCA) device-side control for ESP-IDF. Implements the OCP.1 binary
+  protocol (AES70-3) over TCP plus a compact OCA object model with the control
+  classes a media/DSP device needs (OcaBlock, OcaGain, OcaMute, OcaSwitch,
+  OcaBooleanActuator and typed basic actuators) and the required managers
+  (OcaDeviceManager, OcaSubscriptionManager) with live property-change
+  notifications. Advertises "_oca._tcp" over mDNS so controllers such as AES70
+  Explorer discover the device. Target-agnostic (any ESP-IDF chip with a
+  network interface).
+url: "https://github.com/DatanoiseTV/aes70-esp-idf"
+tags:
+  - aes70
+  - oca
+  - ocp1
+  - audio
+  - dsp
+  - control
+dependencies:
+  idf: ">=5.1"
+  espressif/mdns: ">=1.0.0"

@@ -1,0 +1,61 @@
+menu "AES70 (OCA) device"
+
+    config AES70_MAX_OBJECTS
+        int "Maximum number of OCA objects (incl. managers and blocks)"
+        range 8 1024
+        default 128
+        help
+            Upper bound on the device's object tree. Each slot is one pointer in
+            the registry; the objects themselves are allocated on creation.
+
+    config AES70_MAX_CONNECTIONS
+        int "Maximum concurrent controller connections (TCP)"
+        range 1 16
+        default 4
+        help
+            Each OCP.1 controller opens one TCP connection. Each connection owns
+            a receive assembly buffer of AES70_RX_BUFFER_SIZE bytes.
+
+    config AES70_RX_BUFFER_SIZE
+        int "Per-connection receive/assembly buffer (bytes)"
+        range 512 16384
+        default 2048
+        help
+            Largest OCP.1 message the device will assemble. Commands larger than
+            this are rejected with a NAK-equivalent (the connection is closed).
+
+    config AES70_TX_BUFFER_SIZE
+        int "Shared transmit scratch buffer (bytes)"
+        range 512 16384
+        default 2048
+        help
+            Largest OCP.1 response or notification the device will emit.
+
+    config AES70_MAX_SUBSCRIPTIONS
+        int "Maximum active event subscriptions across all controllers"
+        range 4 1024
+        default 64
+        help
+            One slot per (controller, emitter, property) subscription created via
+            OcaSubscriptionManager.AddSubscription.
+
+    config AES70_KEEPALIVE_TIMEOUT_FACTOR
+        int "Drop a connection after this many missed keep-alive intervals"
+        range 2 10
+        default 3
+        help
+            A controller negotiates a heartbeat interval in its first KeepAlive.
+            If no KeepAlive arrives within factor * interval, the device closes
+            the connection and removes its subscriptions.
+
+    config AES70_TASK_STACK_SIZE
+        int "OCP.1 server task stack size (bytes)"
+        range 3072 16384
+        default 6144
+
+    config AES70_TASK_PRIORITY
+        int "OCP.1 server task priority"
+        range 1 24
+        default 5
+
+endmenu

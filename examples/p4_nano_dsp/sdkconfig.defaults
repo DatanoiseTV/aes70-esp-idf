@@ -1,0 +1,12 @@
+# Default connection: wired Ethernet (the ESP32-P4-Nano has an on-board PHY).
+# The per-target pin map / PHY model lives in sdkconfig.defaults.<target>
+# (see sdkconfig.defaults.esp32p4). To use Wi-Fi instead, flip these and set the
+# SSID/password under "Example Connection Configuration" in `idf.py menuconfig`.
+CONFIG_EXAMPLE_CONNECT_ETHERNET=y
+CONFIG_EXAMPLE_CONNECT_WIFI=n
+
+# mDNS responder.
+CONFIG_MDNS_MAX_INTERFACES=3
+
+# A little extra main-task stack headroom for the network bring-up.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=5120
