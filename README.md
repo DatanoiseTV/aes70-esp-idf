@@ -1,5 +1,10 @@
 # AES70 (OCA) device for ESP-IDF
 
+[![CI](https://github.com/DatanoiseTV/aes70-esp-idf/actions/workflows/ci.yml/badge.svg)](https://github.com/DatanoiseTV/aes70-esp-idf/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Version](https://img.shields.io/badge/version-0.2.0-informational)
+![ESP-IDF ≥ 5.1](https://img.shields.io/badge/ESP--IDF-%E2%89%A5%205.1-red)
+
 An ESP-IDF component that implements the **device (responder) side of AES70** —
 the AES standard for control and monitoring of networked audio devices, also
 known as **OCA** (Open Control Architecture). It speaks **OCP.1** (AES70-3, the
@@ -17,6 +22,44 @@ The component is **target-agnostic** — it uses only BSD sockets, `esp_netif`
 and the `espressif/mdns` component — so it runs on any ESP-IDF chip with a
 network interface. The example targets the **ESP32-P4-Nano** over wired
 Ethernet and builds unchanged for the ESP32-S3, ESP32, ESP32-C6 and others.
+
+## Features
+
+- **OCP.1 (AES70-3)** over TCP: byte-exact framing, the four message types and
+  KeepAlive — verified against the Wireshark dissector and on real hardware.
+- **Ready-to-use control classes**: gain, mute, polarity, switch, delay,
+  boolean/typed actuators, level & temperature sensors, plus purpose-built
+  **OcaDynamics**, **OcaFilterClassical**, **OcaFilterParametric**,
+  **OcaPanBalance** and **OcaSignalGenerator** for compressor/limiter/EQ/
+  crossover/signal-gen UIs.
+- **Live notifications**: EV1/EV2 subscriptions and PropertyChanged events.
+- **mDNS discovery** (`_oca._tcp`, and `_ocasec._tcp` with TLS).
+- **Access control**: mark objects secured (read-open, write-privileged),
+  enforced `OcaLock`, and an **optional TLS listener** with mutual auth.
+- **Tested**: host unit tests (gcc + gcov) for the codec, router and access
+  control; a Python OCP.1 smoke test for on-device integration.
+- **Small and dependency-light**: BSD sockets + `esp_netif` + `mdns`; no RTOS
+  assumptions beyond FreeRTOS. One internal task; mutex never held across I/O.
+
+## Install
+
+Pull it straight from GitHub with the
+[IDF Component Manager](https://docs.espressif.com/projects/idf-component-manager/) —
+add to your project's `main/idf_component.yml`:
+
+```yaml
+dependencies:
+  aes70:
+    git: https://github.com/DatanoiseTV/aes70-esp-idf.git
+    path: components/aes70
+    version: "v0.2.0"
+```
+
+Or vendor it directly by copying `components/aes70/` into your project's
+`components/`, or adding this repository as a git submodule there.
+
+(Publication to the ESP Component Registry is planned; once available it will
+also install with `idf.py add-dependency`.)
 
 ## Status
 
@@ -285,8 +328,16 @@ Configuration (device name, manufacturer, model, serial, TCP port) is under
 
 `idf.py menuconfig` → *AES70 (OCA) device*: object/connection/subscription table
 sizes, the per-connection RX buffer and shared TX buffer, the keep-alive timeout
-factor, and the server task stack/priority.
+factor, the server task stack/priority, and *Enable secure OCP.1 (TLS)*.
+
+## Contributing
+
+Issues and pull requests are welcome. Please run the host unit tests
+(`components/aes70/test/host/run.sh`) before opening a PR, and keep wire-format
+changes cross-checked against the sources listed under *Protocol fidelity*.
+Security reports: see [SECURITY.md](SECURITY.md).
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
