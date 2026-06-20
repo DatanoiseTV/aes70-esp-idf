@@ -33,6 +33,7 @@ struct aes70_object *aes70_object_new(aes70_device_t *dev, aes70_kind_t kind,
     obj->ono         = ono;
     obj->enabled     = true;
     obj->lock_state  = AES70_LOCK_NONE;
+    obj->lock_owner  = -1;
     obj->role        = strdup(role ? role : "");
     if (!obj->role) { free(obj); return NULL; }
 
@@ -98,7 +99,78 @@ aes70_status_t aes70_object_dispatch(struct aes70_object *obj, uint16_t level, u
     if (level < 1 || level > d->class_id_len) return AES70_BAD_METHOD;
     aes70_method_fn h = d->level_handlers[level - 1];
     if (!h) return AES70_BAD_METHOD;
+
+    /* Access control: only gate methods that change state, and only for objects
+     * that are secured or locked (the common, fast path skips this entirely). */
+    if ((obj->secured || obj->lock_state != AES70_LOCK_NONE) &&
+        aes70_method_is_write(obj, level, index)) {
+        int ci = obj->dev->active_conn;
+        bool privileged = (ci >= 0 && ci < CONFIG_AES70_MAX_CONNECTIONS &&
+                           obj->dev->conns[ci].privileged);
+        /* Secured objects: an unprivileged session may read but not write. */
+        if (obj->secured && !privileged) return AES70_PERMISSION_DENIED;
+        /* OcaLock: a write-blocking lock is enforced against every session but
+         * the one that set it (Lock/Unlock themselves are gated the same way, so
+         * a different controller cannot steal or release the lock). */
+        if ((obj->lock_state == AES70_LOCK_NO_WRITE ||
+             obj->lock_state == AES70_LOCK_NO_READ_WRITE) &&
+            ci != obj->lock_owner) {
+            return AES70_LOCKED;
+        }
+    }
     return h(obj, index, in, out, param_count);
+}
+
+/* Setter (state-changing) method indices per class. Kept explicit rather than
+ * inferred so the access-control decision is auditable; add new setters here. */
+bool aes70_method_is_write(const struct aes70_object *obj, uint16_t level, uint16_t index)
+{
+    if (level == 1)                         /* OcaRoot: lock control is a write. */
+        return index == 3 || index == 4 || index == 6;
+    if (level == 2)                         /* OcaWorker: SetEnabled, SetLabel. */
+        return index == 2 || index == 9;
+    switch (obj->kind) {                     /* concrete-class value setters */
+    case AES70_K_GAIN:     case AES70_K_MUTE:      case AES70_K_POLARITY:
+    case AES70_K_SWITCH:   case AES70_K_DELAY:     case AES70_K_FREQUENCY:
+    case AES70_K_IDENTIFY:
+        return level == 4 && index == 2;
+    case AES70_K_BOOLEAN:  case AES70_K_INT32:     case AES70_K_UINT16:
+    case AES70_K_UINT32:   case AES70_K_FLOAT32:   case AES70_K_STRING:
+        return level == 5 && index == 2;
+    case AES70_K_DYNAMICS:               /* even indices 4..26 are the setters */
+        return level == 4 && index >= 4 && index <= 26 && (index % 2) == 0;
+    case AES70_K_FILTER_CLASSICAL:
+        return level == 4 && (index==2||index==4||index==6||index==8||index==10);
+    case AES70_K_FILTER_PARAMETRIC:
+        return level == 4 && (index==2||index==4||index==6||index==8||index==10);
+    case AES70_K_PANBALANCE:
+        return level == 4 && (index==2||index==4);
+    case AES70_K_SIGNAL_GEN:
+        return level == 4 && (index==2||index==4||index==6||index==8||index==10||index==12||index==14);
+    default:
+        return false;   /* sensors/managers/block: no securable setters */
+    }
+}
+
+void aes70_locks_drop_conn(aes70_device_t *dev, int conn_idx)
+{
+    for (size_t i = 0; i < dev->object_count; i++) {
+        struct aes70_object *o = dev->objects[i];
+        if (o->lock_owner == conn_idx) {
+            o->lock_state = AES70_LOCK_NONE;
+            o->lock_owner = -1;
+        }
+    }
+}
+
+void aes70_object_set_secured(aes70_object_handle_t obj, bool secured)
+{
+    if (obj) obj->secured = secured;
+}
+
+bool aes70_object_is_secured(aes70_object_handle_t obj)
+{
+    return obj && obj->secured;
 }
 
 /* ---- Property value encoding (for getters and notifications) ------------ *

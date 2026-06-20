@@ -13,3 +13,9 @@ compile_commands.json
 
 # Logs
 *.log
+
+# Host unit-test / coverage artifacts
+*.gcno
+*.gcda
+*.gcov
+*.o

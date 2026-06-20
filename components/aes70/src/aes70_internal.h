@@ -94,6 +94,8 @@ struct aes70_object {
     char            *label;         /* OcaWorker.Label (heap, may be NULL) */
     bool             enabled;       /* OcaWorker.Enabled */
     uint8_t          lock_state;    /* OcaLockState */
+    int              lock_owner;    /* conn_idx holding the lock, -1 = none */
+    bool             secured;       /* writes require a privileged session */
     uint32_t         tag;           /* application tag */
     aes70_device_t  *dev;
 
@@ -153,6 +155,8 @@ typedef struct {
 typedef struct {
     bool     in_use;
     int      sock;
+    bool     secure;              /* connection is over TLS */
+    bool     privileged;          /* may write secured objects (see aes70_authorize_cb_t) */
     char     addr[48];
     uint16_t port;
     uint8_t  rx[CONFIG_AES70_RX_BUFFER_SIZE];
@@ -289,6 +293,14 @@ aes70_status_t aes70_submgr_dispatch(struct aes70_object *obj, uint16_t idx,
 void aes70_notify_property_changed(aes70_device_t *dev, struct aes70_object *obj,
                                    uint16_t prop_level, uint16_t prop_index);
 void aes70_subscriptions_drop_conn(aes70_device_t *dev, int conn_idx);
+
+/* ---- Access control (aes70_object.c) ------------------------------------ */
+/* True if (level,index) is a state-changing method for this object's class.
+ * Only consulted for secured/locked objects, so it need only be exact for the
+ * controllable actuator/DSP kinds. */
+bool aes70_method_is_write(const struct aes70_object *obj, uint16_t level, uint16_t index);
+/* Release any lock held by a connection that is going away. */
+void aes70_locks_drop_conn(aes70_device_t *dev, int conn_idx);
 
 /* ---- Managers (aes70_managers.c) ---------------------------------------- */
 aes70_status_t aes70_devmgr_dispatch(struct aes70_object *obj, uint16_t idx,

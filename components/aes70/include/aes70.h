@@ -51,6 +51,36 @@ typedef void (*aes70_conn_cb_t)(aes70_device_handle_t dev,
                                 const char *peer_addr, uint16_t peer_port,
                                 aes70_conn_event_t event, void *user);
 
+/*
+ * Decide whether a newly accepted connection is "privileged" -- allowed to
+ * write objects marked secured with aes70_object_set_secured(). Called once per
+ * connection on the internal task. `secure` is true for a TLS connection;
+ * `client_authenticated` is true when the peer presented a certificate that
+ * verified against the configured client CA (mutual TLS). Return true to grant
+ * privilege. If this callback is NULL the default policy is used: privileged ==
+ * client_authenticated (so only a mutually-authenticated TLS controller may
+ * write secured objects, and plaintext controllers never can).
+ */
+typedef bool (*aes70_authorize_cb_t)(const char *peer_addr,
+                                     bool secure, bool client_authenticated,
+                                     void *user);
+
+/*
+ * Optional TLS listener for secure OCP.1 (OCP.1 over TLS, advertised as
+ * _ocasec._tcp). Compiled in only when CONFIG_AES70_ENABLE_TLS is set; with it
+ * off, enabling this returns an error from aes70_device_start(). The PEM buffers
+ * must remain valid for the lifetime of the device.
+ */
+typedef struct {
+    bool        enable;             /* open the TLS listener */
+    uint16_t    port;               /* TLS port; 0 => AES70_DEFAULT_TLS_PORT */
+    const char *server_cert_pem;    /* server certificate chain (PEM). Required. */
+    const char *server_key_pem;     /* server private key (PEM). Required. */
+    const char *client_ca_pem;      /* CA to verify client certs; NULL => no mutual auth */
+    bool        require_client_cert;/* with client_ca_pem set, reject clients with no/!valid cert */
+    bool        disable_plaintext;  /* do not open the insecure _oca._tcp listener */
+} aes70_tls_config_t;
+
 typedef struct {
     /* Device identity (surfaced through OcaDeviceManager and mDNS TXT). */
     const char *device_name;     /* DeviceName, settable by a controller. Required. */
@@ -69,7 +99,11 @@ typedef struct {
     /* Application callbacks. */
     aes70_control_changed_cb_t on_control_changed;
     aes70_conn_cb_t            on_connection;
+    aes70_authorize_cb_t       authorize;     /* per-connection privilege (see typedef) */
     void                      *user;
+
+    /* Security: optional TLS listener for secure OCP.1. */
+    aes70_tls_config_t         tls;
 
     /* Internal task. Zeros => Kconfig defaults. */
     int task_priority;

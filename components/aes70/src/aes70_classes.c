@@ -31,9 +31,11 @@ aes70_status_t aes70_root_dispatch(struct aes70_object *obj, uint16_t idx,
         return AES70_OK;
     case 3: /* SetLockNoReadWrite (a.k.a. Lock) */
         obj->lock_state = AES70_LOCK_NO_READ_WRITE;
+        obj->lock_owner = obj->dev->active_conn;
         return AES70_OK;
     case 4: /* Unlock */
         obj->lock_state = AES70_LOCK_NONE;
+        obj->lock_owner = -1;
         return AES70_OK;
     case 5: /* GetRole -> OcaString */
         ocp1_wr_string(out, obj->role);
@@ -41,6 +43,7 @@ aes70_status_t aes70_root_dispatch(struct aes70_object *obj, uint16_t idx,
         return AES70_OK;
     case 6: /* SetLockNoWrite */
         obj->lock_state = AES70_LOCK_NO_WRITE;
+        obj->lock_owner = obj->dev->active_conn;
         return AES70_OK;
     case 7: /* GetLockState -> OcaLockState */
         ocp1_wr_u8(out, obj->lock_state);

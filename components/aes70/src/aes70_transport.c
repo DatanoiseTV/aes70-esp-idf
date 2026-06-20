@@ -60,6 +60,7 @@ static void close_conn(aes70_device_t *dev, int conn_idx)
     if (!c->in_use) return;
     if (c->sock >= 0) { shutdown(c->sock, SHUT_RDWR); close(c->sock); }
     aes70_subscriptions_drop_conn(dev, conn_idx);
+    aes70_locks_drop_conn(dev, conn_idx);
     if (dev->cfg.on_connection) {
         dev->cfg.on_connection((aes70_device_handle_t)dev, c->addr, c->port,
                                AES70_CONN_CLOSED, dev->cfg.user);
@@ -163,7 +164,17 @@ static void accept_conn(aes70_device_t *dev)
         inet6_ntoa_r(si->sin6_addr, c->addr, sizeof(c->addr));
         c->port = ntohs(si->sin6_port);
     }
-    ESP_LOGI(TAG, "controller connected: %s:%u", c->addr, c->port);
+    /* Decide whether this (plaintext) session may write secured objects. The
+     * default policy leaves plaintext sessions unprivileged; an authorize
+     * callback can override (e.g. trust a management subnet). TLS sessions get
+     * their privilege from the client certificate in the secure accept path. */
+    c->secure = false;
+    c->privileged = dev->cfg.authorize
+                  ? dev->cfg.authorize(c->addr, false /*secure*/, false /*authenticated*/, dev->cfg.user)
+                  : false;
+
+    ESP_LOGI(TAG, "controller connected: %s:%u%s", c->addr, c->port,
+             c->privileged ? " (privileged)" : "");
     if (dev->cfg.on_connection) {
         dev->cfg.on_connection((aes70_device_handle_t)dev, c->addr, c->port,
                                AES70_CONN_OPENED, dev->cfg.user);

@@ -58,6 +58,15 @@ uint32_t aes70_object_get_tag(aes70_object_handle_t obj);
 /* Set the OcaWorker Label (human-readable, shown by controllers). Copied. */
 esp_err_t aes70_object_set_label(aes70_object_handle_t obj, const char *label);
 
+/* Access control: mark an object secured. A controller may always READ a
+ * secured object, but any state-changing method (Set*, Lock) is rejected with
+ * OcaStatus PermissionDenied unless that controller's session is privileged
+ * (see aes70_authorize_cb_t / the TLS config in aes70.h). Use it to protect the
+ * parameters an unprivileged operator must not touch -- crossover, limiter,
+ * routing -- while leaving volume and the like open. Default: not secured. */
+void aes70_object_set_secured(aes70_object_handle_t obj, bool secured);
+bool aes70_object_is_secured(aes70_object_handle_t obj);
+
 /* ---- OcaBlock (topology container) -------------------------------------- */
 aes70_object_handle_t aes70_block_create(aes70_device_handle_t dev,
                                          aes70_object_handle_t parent,
