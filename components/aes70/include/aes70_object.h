@@ -245,6 +245,23 @@ aes70_object_handle_t aes70_identify_create(aes70_device_handle_t dev, aes70_obj
 bool      aes70_identify_get(aes70_object_handle_t obj);
 esp_err_t aes70_identify_set(aes70_object_handle_t obj, bool active);
 
+/* ---- OcaGrouper (grouping agent, ClassID 1.2.2) ------------------------- *
+ * Links several control objects of one class so that writing a group's proxy
+ * object applies to every member enrolled in that group. Pick the member
+ * (citizen) class at creation. A controller then calls AddGroup (each group
+ * gets a proxy object whose ONo is returned), AddCitizen (by ONo), and
+ * SetEnrollment. Writing a group's proxy fans the value out to its enrolled,
+ * local members. */
+typedef enum {
+    AES70_GROUPER_GAIN = 0,   /* members are OcaGain */
+    AES70_GROUPER_MUTE,       /* members are OcaMute */
+    AES70_GROUPER_BOOLEAN,    /* members are OcaBooleanActuator */
+} aes70_grouper_citizen_class_t;
+
+aes70_object_handle_t aes70_grouper_create(aes70_device_handle_t dev, aes70_object_handle_t parent,
+                                           const char *role,
+                                           aes70_grouper_citizen_class_t citizen_class);
+
 #ifdef __cplusplus
 }
 #endif

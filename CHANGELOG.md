@@ -11,6 +11,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 - **IPv6 listener.** The OCP.1 server (and the TLS listener) now also accept
   connections over IPv6 via a separate dual listener, in addition to IPv4.
   Falls back to IPv4-only when lwIP IPv6 is disabled.
+- **OcaGrouper** (ClassID 1.2.2), a grouping agent: `aes70_grouper_create()`
+  with a member class (gain/mute/boolean). Controllers add groups (each gets a
+  proxy object), add citizens by ONo, and enroll them; writing a group's proxy
+  fans the value out to every enrolled local member. Includes the OcaAgent base
+  level (GetLabel/SetLabel/GetOwner/GetPath) and host unit tests for the full
+  add/enroll/fan-out flow. Remote (cross-device) citizens are reported
+  NotImplemented.
 
 ## [0.2.0] - 2026-06-20
 

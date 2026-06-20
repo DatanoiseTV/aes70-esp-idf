@@ -331,12 +331,57 @@ static aes70_status_t basic_actuator_dispatch(struct aes70_object *obj, uint16_t
     return AES70_BAD_METHOD;
 }
 
+/* ---- OcaAgent (level 2, ClassID 1.2): base for agents (grouper, ...) ----- *
+ * Note the method indices differ from OcaWorker: agents have no Enabled, and
+ * Label/Owner sit at 2.1/2.2/2.3 rather than 2.8/2.9/2.10. */
+aes70_status_t aes70_agent_dispatch(struct aes70_object *obj, uint16_t idx,
+                                    ocp1_rd_t *in, ocp1_wr_t *out, uint8_t *pc)
+{
+    switch (idx) {
+    case 1: /* GetLabel -> OcaString */
+        ocp1_wr_string(out, obj->label ? obj->label : "");
+        *pc = 1; return AES70_OK;
+    case 2: { /* SetLabel <- OcaString */
+        char buf[64];
+        ocp1_rd_string(in, buf, sizeof(buf));
+        if (in->err) return AES70_BAD_FORMAT;
+        char *copy = strdup(buf);
+        if (!copy) return AES70_OUT_OF_MEMORY;
+        aes70_lock(obj->dev);
+        char *old = obj->label; obj->label = copy;
+        aes70_unlock(obj->dev);
+        free(old);
+        return AES70_OK;
+    }
+    case 3: /* GetOwner -> OcaONo */
+        ocp1_wr_u32(out, obj->owner_ono);
+        *pc = 1; return AES70_OK;
+    case 4: { /* GetPath -> (OcaList<OcaString> roles, OcaList<OcaONo> onos), root-first */
+        uint32_t onos[16]; const char *roles[16]; int n = 0;
+        struct aes70_object *o = obj;
+        while (o && n < 16) {
+            onos[n] = o->ono; roles[n] = o->role ? o->role : ""; n++;
+            if (o->ono == AES70_ONO_ROOT_BLOCK || o->owner_ono == 0) break;
+            o = aes70_device_find(obj->dev, o->owner_ono);
+        }
+        ocp1_wr_u16(out, (uint16_t)n);
+        for (int i = n - 1; i >= 0; i--) ocp1_wr_string(out, roles[i]);
+        ocp1_wr_u16(out, (uint16_t)n);
+        for (int i = n - 1; i >= 0; i--) ocp1_wr_u32(out, onos[i]);
+        *pc = 2; return AES70_OK;
+    }
+    default:
+        return AES70_BAD_METHOD;
+    }
+}
+
 /* ---- Class descriptor table --------------------------------------------- *
  * level_handlers[i] handles methods whose DefLevel == i+1 (NULL = no methods at
  * that level). The class_id length equals the number of levels. */
 
 /* Reusable level-handler arrays. */
 static const aes70_method_fn lv_block[]   = { aes70_root_dispatch, aes70_worker_dispatch, aes70_block_dispatch };
+static const aes70_method_fn lv_grouper[] = { aes70_root_dispatch, aes70_agent_dispatch, aes70_grouper_dispatch };
 static const aes70_method_fn lv_gain[]    = { aes70_root_dispatch, aes70_worker_dispatch, NULL, gain_dispatch };
 static const aes70_method_fn lv_mute[]    = { aes70_root_dispatch, aes70_worker_dispatch, NULL, state2_dispatch };
 static const aes70_method_fn lv_pol[]     = { aes70_root_dispatch, aes70_worker_dispatch, NULL, state2_dispatch };
@@ -374,6 +419,7 @@ static const uint16_t cid_filter[]   = { 1, 1, 1, 9 };
 static const uint16_t cid_peq[]      = { 1, 1, 1, 10 };
 static const uint16_t cid_pan[]      = { 1, 1, 1, 6 };
 static const uint16_t cid_siggen[]   = { 1, 1, 1, 17 };
+static const uint16_t cid_grouper[]  = { 1, 2, 2 };
 static const uint16_t cid_devmgr[]   = { 1, 3, 1 };
 static const uint16_t cid_submgr[]   = { 1, 3, 4 };
 
@@ -399,6 +445,7 @@ static const aes70_class_desc_t k_desc[AES70_K_COUNT] = {
     [AES70_K_FILTER_PARAMETRIC] = { cid_peq, 4, 3, lv_peq, "OcaFilterParametric" },
     [AES70_K_PANBALANCE]   = { cid_pan, 4, 3, lv_pan, "OcaPanBalance" },
     [AES70_K_SIGNAL_GEN]   = { cid_siggen, 4, 3, lv_siggen, "OcaSignalGenerator" },
+    [AES70_K_GROUPER]      = { cid_grouper, 3, 3, lv_grouper, "OcaGrouper" },
     [AES70_K_DEVICE_MANAGER]       = { cid_devmgr, 3, 3, lv_devmgr, "OcaDeviceManager" },
     [AES70_K_SUBSCRIPTION_MANAGER] = { cid_submgr, 3, 4, lv_submgr, "OcaSubscriptionManager" },
 };

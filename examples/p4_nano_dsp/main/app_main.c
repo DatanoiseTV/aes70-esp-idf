@@ -219,6 +219,12 @@ static void build_dsp_tree(aes70_device_handle_t dev)
     track(aes70_gain_create(dev, high, "Gain", -24.0f, 6.0f, 0.0f), "High Gain", T_GAIN);
     track(aes70_mute_create(dev, high, "Mute", false),             "High Mute", T_MUTE);
 
+    /* A gain grouper: a controller can create groups (each gets a proxy gain),
+     * enroll any of the device's gains as citizens, and then drive a whole set
+     * from the group proxy. */
+    aes70_object_handle_t groups = aes70_block_create(dev, NULL, "Groups");
+    aes70_grouper_create(dev, groups, "GainGroups", AES70_GROUPER_GAIN);
+
     /* System: real chip temperature + identify. */
     aes70_object_handle_t sys = aes70_block_create(dev, NULL, "System");
     s_temp = aes70_temperature_create(dev, sys, "ChipTemp", -10.0f, 125.0f);

@@ -75,6 +75,10 @@ static float params_to_f32(const uint8_t *p)
 {
     ocp1_rd_t r; ocp1_rd_init(&r, p, 4); return ocp1_rd_f32(&r);
 }
+static uint16_t resp_u16(const uint8_t *p)
+{
+    ocp1_rd_t r; ocp1_rd_init(&r, p, 2); return ocp1_rd_u16(&r);
+}
 
 /* ---- Tests -------------------------------------------------------------- */
 
@@ -233,6 +237,87 @@ static void test_bad_ono(void)
     aes70_device_stop(dev);
 }
 
+static void test_grouper(void)
+{
+    aes70_device_config_t cfg; aes70_device_config_default(&cfg);
+    cfg.device_name = "DSP"; cfg.manufacturer = "M"; cfg.model = "X"; cfg.enable_mdns = false;
+    aes70_device_handle_t dev; aes70_device_start(&cfg, &dev);
+
+    aes70_object_handle_t g1 = aes70_gain_create(dev, NULL, "Ch1", -80, 12, 0);
+    aes70_object_handle_t g2 = aes70_gain_create(dev, NULL, "Ch2", -80, 12, 0);
+    aes70_object_handle_t grp = aes70_grouper_create(dev, NULL, "GainGroup", AES70_GROUPER_GAIN);
+    uint32_t grp_ono = aes70_object_ono(grp);
+    uint32_t c1 = aes70_object_ono(g1), c2 = aes70_object_ono(g2);
+    conn_set((aes70_device_t *)dev, 0, false);
+
+    uint8_t p[64], rp[64]; size_t rl; uint8_t st; ocp1_wr_t w; ocp1_rd_t r;
+
+    /* AddGroup("G1") -> (groupIndex u16, proxyONo u32). */
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_string(&w, "G1");
+    st = route_cmd((aes70_device_t *)dev, 0, grp_ono, 3, 1, p, w.off, rp, &rl);
+    CHECK(st == AES70_OK, "AddGroup status = %u", st);
+    ocp1_rd_init(&r, rp, rl);
+    uint16_t gi = ocp1_rd_u16(&r); uint32_t proxy = ocp1_rd_u32(&r);
+    CHECK(gi == 1, "group index = %u", gi);
+    CHECK(proxy != 0, "proxy ONo non-zero");
+
+    /* AddCitizen(c1), AddCitizen(c2): OcaGrouperCitizen{idx, OPath{hostBlob, ONo}, online}. */
+    uint16_t ci1 = 0, ci2 = 0;
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u16(&w, 0); ocp1_wr_u16(&w, 0); ocp1_wr_u32(&w, c1); ocp1_wr_u8(&w, 1);
+    st = route_cmd((aes70_device_t *)dev, 0, grp_ono, 3, 5, p, w.off, rp, &rl);
+    CHECK(st == AES70_OK, "AddCitizen1 = %u", st); ci1 = resp_u16(rp);
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u16(&w, 0); ocp1_wr_u16(&w, 0); ocp1_wr_u32(&w, c2); ocp1_wr_u8(&w, 1);
+    st = route_cmd((aes70_device_t *)dev, 0, grp_ono, 3, 5, p, w.off, rp, &rl);
+    CHECK(st == AES70_OK, "AddCitizen2 = %u", st); ci2 = resp_u16(rp);
+
+    /* Adding a citizen of the wrong class is rejected. */
+    aes70_object_handle_t mute = aes70_mute_create(dev, NULL, "M", false);
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u16(&w, 0); ocp1_wr_u16(&w, 0);
+    ocp1_wr_u32(&w, aes70_object_ono(mute)); ocp1_wr_u8(&w, 1);
+    st = route_cmd((aes70_device_t *)dev, 0, grp_ono, 3, 5, p, w.off, NULL, NULL);
+    CHECK(st == AES70_PARAMETER_ERROR, "wrong-class citizen rejected = %u", st);
+
+    st = route_cmd((aes70_device_t *)dev, 0, grp_ono, 3, 3, NULL, 0, rp, &rl);   /* GetGroupCount */
+    CHECK(st == AES70_OK && resp_u16(rp) == 1, "group count");
+    st = route_cmd((aes70_device_t *)dev, 0, grp_ono, 3, 7, NULL, 0, rp, &rl);   /* GetCitizenCount */
+    CHECK(st == AES70_OK && resp_u16(rp) == 2, "citizen count = %u", resp_u16(rp));
+
+    /* Enroll both citizens in the group. */
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u16(&w, gi); ocp1_wr_u16(&w, ci1); ocp1_wr_u8(&w, 1);
+    st = route_cmd((aes70_device_t *)dev, 0, grp_ono, 3, 10, p, w.off, NULL, NULL);
+    CHECK(st == AES70_OK, "SetEnrollment1 = %u", st);
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u16(&w, gi); ocp1_wr_u16(&w, ci2); ocp1_wr_u8(&w, 1);
+    route_cmd((aes70_device_t *)dev, 0, grp_ono, 3, 10, p, w.off, NULL, NULL);
+
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u16(&w, gi); ocp1_wr_u16(&w, ci1);  /* GetEnrollment */
+    st = route_cmd((aes70_device_t *)dev, 0, grp_ono, 3, 9, p, w.off, rp, &rl);
+    CHECK(st == AES70_OK && rp[0] == 1, "GetEnrollment true");
+
+    /* Fan-out: writing the group's proxy gain drives both enrolled citizens. */
+    f32_to_params(-10.f, p);
+    st = route_cmd((aes70_device_t *)dev, 0, proxy, 4, 2, p, 4, NULL, NULL);
+    CHECK(st == AES70_OK, "proxy SetGain = %u", st);
+    CHECK(fabsf(aes70_gain_get(g1) + 10.f) < 1e-3f, "citizen1 followed (%.2f)", aes70_gain_get(g1));
+    CHECK(fabsf(aes70_gain_get(g2) + 10.f) < 1e-3f, "citizen2 followed (%.2f)", aes70_gain_get(g2));
+
+    /* Un-enroll citizen 2; it should stop following. */
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u16(&w, gi); ocp1_wr_u16(&w, ci2); ocp1_wr_u8(&w, 0);
+    route_cmd((aes70_device_t *)dev, 0, grp_ono, 3, 10, p, w.off, NULL, NULL);
+    f32_to_params(-20.f, p);
+    route_cmd((aes70_device_t *)dev, 0, proxy, 4, 2, p, 4, NULL, NULL);
+    CHECK(fabsf(aes70_gain_get(g1) + 20.f) < 1e-3f, "c1 follows after unenroll (%.2f)", aes70_gain_get(g1));
+    CHECK(fabsf(aes70_gain_get(g2) + 10.f) < 1e-3f, "c2 frozen after unenroll (%.2f)", aes70_gain_get(g2));
+
+    /* OcaAgent base methods (SetLabel/GetLabel at level 2). */
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_string(&w, "MyGroup");
+    st = route_cmd((aes70_device_t *)dev, 0, grp_ono, 2, 2, p, w.off, NULL, NULL);
+    CHECK(st == AES70_OK, "agent SetLabel = %u", st);
+    st = route_cmd((aes70_device_t *)dev, 0, grp_ono, 2, 1, NULL, 0, rp, &rl);
+    CHECK(st == AES70_OK && resp_u16(rp) == 7, "agent GetLabel returns 'MyGroup'");
+
+    aes70_device_stop(dev);
+}
+
 int main(void)
 {
     printf("AES70 host unit tests\n");
@@ -241,6 +326,7 @@ int main(void)
     test_router_and_security();
     test_locking();
     test_bad_ono();
+    test_grouper();
     printf("%d checks, %d failures\n", g_checks, g_fails);
     return g_fails ? 1 : 0;
 }

@@ -3,6 +3,7 @@ idf_component_register(
          "src/aes70_object.c"
          "src/aes70_classes.c"
          "src/aes70_dsp.c"
+         "src/aes70_grouper.c"
          "src/aes70_managers.c"
          "src/aes70_subscription.c"
          "src/aes70_transport.c"

@@ -147,6 +147,8 @@ bool aes70_method_is_write(const struct aes70_object *obj, uint16_t level, uint1
         return level == 4 && (index==2||index==4);
     case AES70_K_SIGNAL_GEN:
         return level == 4 && (index==2||index==4||index==6||index==8||index==10||index==12||index==14);
+    case AES70_K_GROUPER:   /* AddGroup/DeleteGroup/AddCitizen/DeleteCitizen/SetEnrollment/SetActuatorOrSensor/SetMode */
+        return level == 3 && (index==1||index==2||index==5||index==6||index==10||index==13||index==15);
     default:
         return false;   /* sensors/managers/block: no securable setters */
     }
@@ -217,7 +219,7 @@ static void encode_value(struct aes70_object *obj, ocp1_wr_t *out)
 
 /* Map a kind to its primary property id; returns false for classes without one
  * (e.g. OcaBlock, managers). */
-static bool primary_property(struct aes70_object *obj, uint16_t *level, uint16_t *index)
+bool aes70_object_primary_property(struct aes70_object *obj, uint16_t *level, uint16_t *index)
 {
     switch (obj->kind) {
     case AES70_K_GAIN: case AES70_K_MUTE: case AES70_K_POLARITY:
@@ -252,7 +254,7 @@ bool aes70_object_encode_property(struct aes70_object *obj, uint16_t level, uint
 
     /* The class's primary value property. */
     uint16_t pl, pi;
-    if (primary_property(obj, &pl, &pi) && level == pl && index == pi) {
+    if (aes70_object_primary_property(obj, &pl, &pi) && level == pl && index == pi) {
         encode_value(obj, out);
         return true;
     }
@@ -269,8 +271,10 @@ void aes70_object_commit_num(struct aes70_object *obj, double v,
 
     aes70_notify_property_changed(obj->dev, obj, prop_level, prop_index);
 
-    if (from_controller && obj->dev->cfg.on_control_changed) {
-        obj->dev->cfg.on_control_changed(obj, obj->tag, obj->dev->cfg.user);
+    if (from_controller) {
+        if (obj->dev->cfg.on_control_changed)
+            obj->dev->cfg.on_control_changed(obj, obj->tag, obj->dev->cfg.user);
+        aes70_grouper_on_commit(obj->dev, obj);   /* fan out if obj is a group proxy */
     }
 }
 
@@ -304,7 +308,7 @@ void aes70_object_apply_set(aes70_device_t *dev, const aes70_set_req_t *req)
     }
 
     uint16_t pl, pi;
-    if (!primary_property(obj, &pl, &pi)) return;
+    if (!aes70_object_primary_property(obj, &pl, &pi)) return;
 
     if (req->is_string) {
         aes70_object_commit_str(obj, req->str, pl, pi, false);

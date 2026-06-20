@@ -109,7 +109,7 @@ recommended next check.
   need to change to add classes.
 - Per-object locking (`OcaRoot.LockState`), `GetClassIdentification`, role/label.
 
-**Control classes (Workers)**
+**Control classes (Workers and Agents)**
 
 | Class | ClassID | Purpose |
 |---|---|---|
@@ -134,6 +134,7 @@ recommended next check.
 | OcaFrequencyActuator | 1.1.1.8 | frequency parameter (Hz) |
 | OcaTemperatureSensor | 1.1.2.5 | temperature reading (device reports) |
 | OcaIdentificationActuator | 1.1.1.21 | identify (locate the device) |
+| OcaGrouper | 1.2.2 | grouping agent: one write drives all enrolled members |
 
 `OcaDynamics`, `OcaFilterClassical`, `OcaFilterParametric`, `OcaPanBalance` and
 `OcaSignalGenerator` carry their whole parameter set in one object, so a
@@ -164,7 +165,7 @@ rather than silently omitted:
 
 - Connection management (OcaStreamConnector / media-transport adaptations).
 - Snapshot/preset library (OcaLibraryManager, dataset objects).
-- Control grouping agents (OcaGrouper) and matrix (OcaMatrix).
+- Matrix (OcaMatrix).
 - Reconfigurable-DSP construction (`OcaBlock.ConstructActionObject`).
 - Firmware-update manager and the other optional managers.
 

@@ -19,7 +19,7 @@ rm -f "$OUT"/*.gcda "$OUT"/*.gcov
 # Pure sources under test (transport + mDNS are replaced by stubs.c).
 SOURCES=(
   "$SRC/aes70_ocp1.c" "$SRC/aes70_object.c" "$SRC/aes70_classes.c"
-  "$SRC/aes70_dsp.c"  "$SRC/aes70_managers.c" "$SRC/aes70_subscription.c"
+  "$SRC/aes70_dsp.c"  "$SRC/aes70_grouper.c" "$SRC/aes70_managers.c" "$SRC/aes70_subscription.c"
   "$SRC/aes70_device.c" "$HERE/stubs.c" "$HERE/test_aes70.c"
 )
 # -include the standard headers IDF pulls in transitively (the host shims are
