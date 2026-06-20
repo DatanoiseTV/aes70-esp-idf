@@ -164,8 +164,16 @@ esp_err_t aes70_device_start(const aes70_device_config_t *cfg, aes70_device_hand
     if (err != ESP_OK) { aes70_device_stop(dev); return err; }
 
     if (cfg->enable_mdns) {
-        aes70_mdns_start(cfg->mdns_hostname, dev->port, dev->device_name,
-                         dev->manufacturer, dev->model, dev->serial);
+        if (!cfg->tls.disable_plaintext) {
+            aes70_mdns_start(cfg->mdns_hostname, dev->port, dev->device_name,
+                             dev->manufacturer, dev->model, dev->serial);
+        }
+#if CONFIG_AES70_ENABLE_TLS
+        if (cfg->tls.enable) {
+            aes70_mdns_add_secure(cfg->mdns_hostname, dev->tls_port, dev->device_name,
+                                  dev->manufacturer, dev->model, dev->serial);
+        }
+#endif
     }
 
     ESP_LOGI(TAG, "device \"%s\" up on TCP %u (%u objects)",

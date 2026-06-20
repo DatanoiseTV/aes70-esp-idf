@@ -9,12 +9,24 @@
  */
 #include <string.h>
 #include <errno.h>
+#include <fcntl.h>
 
 #include "lwip/sockets.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 
 #include "aes70_internal.h"
+
+#if CONFIG_AES70_ENABLE_TLS
+#include "esp_tls.h"
+#ifndef CONFIG_AES70_TLS_HANDSHAKE_TIMEOUT_MS
+#define CONFIG_AES70_TLS_HANDSHAKE_TIMEOUT_MS 8000
+#endif
+#define AES70_TLS(c) ((esp_tls_t *)(c)->tls)
+static bool tls_would_block(int r) {
+    return r == ESP_TLS_ERR_SSL_WANT_READ || r == ESP_TLS_ERR_SSL_WANT_WRITE;
+}
+#endif
 
 static const char *TAG = "aes70.tcp";
 
@@ -25,7 +37,19 @@ int aes70_conn_send(aes70_device_t *dev, int conn_idx, const uint8_t *buf, size_
     if (!c->in_use) return -1;
     size_t sent = 0;
     while (sent < len) {
-        int w = send(c->sock, buf + sent, len - sent, 0);
+        int w;
+#if CONFIG_AES70_ENABLE_TLS
+        if (c->tls) {
+            w = esp_tls_conn_write(AES70_TLS(c), buf + sent, len - sent);
+            if (w <= 0) {
+                if (tls_would_block(w)) continue;   /* small frames: retry to completion */
+                return -1;
+            }
+            sent += (size_t)w;
+            continue;
+        }
+#endif
+        w = send(c->sock, buf + sent, len - sent, 0);
         if (w <= 0) {
             if (w < 0 && (errno == EINTR)) continue;
             return -1;
@@ -58,10 +82,17 @@ static void close_conn(aes70_device_t *dev, int conn_idx)
 {
     aes70_conn_t *c = &dev->conns[conn_idx];
     if (!c->in_use) return;
+    bool announced = true;
+#if CONFIG_AES70_ENABLE_TLS
+    /* A connection still handshaking never fired CONN_OPENED, so suppress the
+     * matching CONN_CLOSED. esp_tls owns and closes the underlying socket. */
+    announced = !c->handshaking;
+    if (c->tls) { esp_tls_conn_destroy(AES70_TLS(c)); c->tls = NULL; c->sock = -1; }
+#endif
     if (c->sock >= 0) { shutdown(c->sock, SHUT_RDWR); close(c->sock); }
     aes70_subscriptions_drop_conn(dev, conn_idx);
     aes70_locks_drop_conn(dev, conn_idx);
-    if (dev->cfg.on_connection) {
+    if (announced && dev->cfg.on_connection) {
         dev->cfg.on_connection((aes70_device_handle_t)dev, c->addr, c->port,
                                AES70_CONN_CLOSED, dev->cfg.user);
     }
@@ -181,6 +212,118 @@ static void accept_conn(aes70_device_t *dev)
     }
 }
 
+#if CONFIG_AES70_ENABLE_TLS
+/* esp_tls expects PEM buffers counted INCLUDING the terminating NUL. */
+static unsigned pem_len(const char *p) { return p ? (unsigned)strlen(p) + 1u : 0u; }
+
+/* Accept on the TLS listener and start a non-blocking handshake. CONN_OPENED is
+ * deferred to tls_drive_handshake() so it only fires for a real secure session. */
+static void accept_tls_conn(aes70_device_t *dev)
+{
+    struct sockaddr_storage src;
+    socklen_t slen = sizeof(src);
+    int s = accept(dev->tls_listen_sock, (struct sockaddr *)&src, &slen);
+    if (s < 0) return;
+
+    int slot = -1;
+    for (int i = 0; i < CONFIG_AES70_MAX_CONNECTIONS; i++)
+        if (!dev->conns[i].in_use) { slot = i; break; }
+    if (slot < 0) { ESP_LOGW(TAG, "connection table full, rejecting"); close(s); return; }
+
+    int one = 1;
+    setsockopt(s, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+    int fl = fcntl(s, F_GETFL, 0);
+    fcntl(s, F_SETFL, fl | O_NONBLOCK);               /* drive the handshake async */
+
+    esp_tls_t *tls = esp_tls_init();
+    if (!tls) { close(s); return; }
+    esp_tls_cfg_server_t cfg = {
+        .servercert_buf   = (const unsigned char *)dev->cfg.tls.server_cert_pem,
+        .servercert_bytes = pem_len(dev->cfg.tls.server_cert_pem),
+        .serverkey_buf    = (const unsigned char *)dev->cfg.tls.server_key_pem,
+        .serverkey_bytes  = pem_len(dev->cfg.tls.server_key_pem),
+        .cacert_buf       = (const unsigned char *)dev->cfg.tls.client_ca_pem,
+        .cacert_bytes     = pem_len(dev->cfg.tls.client_ca_pem),
+        .tls_handshake_timeout_ms = CONFIG_AES70_TLS_HANDSHAKE_TIMEOUT_MS,
+    };
+    if (esp_tls_server_session_init(&cfg, s, tls) != ESP_OK) {
+        ESP_LOGW(TAG, "TLS session init failed");
+        esp_tls_conn_destroy(tls);                    /* also closes s */
+        return;
+    }
+
+    int64_t now = esp_timer_get_time();
+    aes70_conn_t *c = &dev->conns[slot];
+    memset(c, 0, sizeof(*c));
+    c->in_use = true;
+    c->sock = s;
+    c->tls = tls;
+    c->secure = true;
+    c->handshaking = true;
+    c->last_rx_us = c->last_tx_us = now;
+    c->hs_deadline_us = now + (int64_t)CONFIG_AES70_TLS_HANDSHAKE_TIMEOUT_MS * 1000;
+    if (src.ss_family == AF_INET) {
+        struct sockaddr_in *si = (struct sockaddr_in *)&src;
+        inet_ntoa_r(si->sin_addr, c->addr, sizeof(c->addr));
+        c->port = ntohs(si->sin_port);
+    } else if (src.ss_family == AF_INET6) {
+        struct sockaddr_in6 *si = (struct sockaddr_in6 *)&src;
+        inet6_ntoa_r(si->sin6_addr, c->addr, sizeof(c->addr));
+        c->port = ntohs(si->sin6_port);
+    }
+}
+
+/* Advance a pending handshake. Returns false to drop the connection. */
+static bool tls_drive_handshake(aes70_device_t *dev, int i, int64_t now)
+{
+    aes70_conn_t *c = &dev->conns[i];
+    if (now > c->hs_deadline_us) {
+        ESP_LOGW(TAG, "TLS handshake timeout %s:%u", c->addr, c->port);
+        return false;
+    }
+    int r = esp_tls_server_session_continue_async(AES70_TLS(c));
+    if (tls_would_block(r)) return true;              /* still negotiating */
+    if (r != 0) {
+        ESP_LOGW(TAG, "TLS handshake failed (%d) %s:%u", r, c->addr, c->port);
+        return false;
+    }
+    /* Done. With a client CA set, mutual auth is required, so a completed
+     * handshake implies the peer presented a certificate that verified. */
+    c->handshaking = false;
+    c->last_rx_us = now;
+    bool authed = (dev->cfg.tls.client_ca_pem != NULL);
+    c->privileged = dev->cfg.authorize
+                  ? dev->cfg.authorize(c->addr, true /*secure*/, authed, dev->cfg.user)
+                  : authed;
+    ESP_LOGI(TAG, "secure controller connected: %s:%u%s", c->addr, c->port,
+             c->privileged ? " (privileged)" : "");
+    if (dev->cfg.on_connection)
+        dev->cfg.on_connection((aes70_device_handle_t)dev, c->addr, c->port,
+                               AES70_CONN_OPENED, dev->cfg.user);
+    return true;
+}
+
+/* Read all currently-available plaintext (draining mbedTLS's internal record
+ * buffer, which select() cannot see) and route complete frames. */
+static bool tls_service_rx(aes70_device_t *dev, int i, int64_t now)
+{
+    aes70_conn_t *c = &dev->conns[i];
+    do {
+        int r = esp_tls_conn_read(AES70_TLS(c), c->rx + c->rx_len, sizeof(c->rx) - c->rx_len);
+        if (r > 0) {
+            c->rx_len += (size_t)r;
+            c->last_rx_us = now;
+            if (!process_rx(dev, i)) return false;
+        } else if (tls_would_block(r)) {
+            break;
+        } else {
+            return false;                             /* peer closed or error */
+        }
+    } while (c->in_use && c->rx_len < sizeof(c->rx) && esp_tls_get_bytes_avail(AES70_TLS(c)) > 0);
+    return true;
+}
+#endif /* CONFIG_AES70_ENABLE_TLS */
+
 /* ---- Application value-change drain -------------------------------------- */
 static void drain_cmd_queue(aes70_device_t *dev)
 {
@@ -216,12 +359,10 @@ static void server_task(void *arg)
     while (dev->running) {
         fd_set rfds;
         FD_ZERO(&rfds);
-        int maxfd = dev->listen_sock;
-        FD_SET(dev->listen_sock, &rfds);
-        if (dev->wake_recv_sock >= 0) {
-            FD_SET(dev->wake_recv_sock, &rfds);
-            if (dev->wake_recv_sock > maxfd) maxfd = dev->wake_recv_sock;
-        }
+        int maxfd = -1;
+        if (dev->listen_sock >= 0)     { FD_SET(dev->listen_sock, &rfds);     if (dev->listen_sock > maxfd)     maxfd = dev->listen_sock; }
+        if (dev->tls_listen_sock >= 0) { FD_SET(dev->tls_listen_sock, &rfds); if (dev->tls_listen_sock > maxfd) maxfd = dev->tls_listen_sock; }
+        if (dev->wake_recv_sock >= 0)  { FD_SET(dev->wake_recv_sock, &rfds);  if (dev->wake_recv_sock > maxfd)  maxfd = dev->wake_recv_sock; }
         for (int i = 0; i < CONFIG_AES70_MAX_CONNECTIONS; i++) {
             if (dev->conns[i].in_use) {
                 FD_SET(dev->conns[i].sock, &rfds);
@@ -239,18 +380,36 @@ static void server_task(void *arg)
                 recv(dev->wake_recv_sock, drain, sizeof(drain), 0);
                 drain_cmd_queue(dev);
             }
-            if (FD_ISSET(dev->listen_sock, &rfds)) {
+            if (dev->listen_sock >= 0 && FD_ISSET(dev->listen_sock, &rfds))
                 accept_conn(dev);
+#if CONFIG_AES70_ENABLE_TLS
+            if (dev->tls_listen_sock >= 0 && FD_ISSET(dev->tls_listen_sock, &rfds))
+                accept_tls_conn(dev);
+#endif
+        }
+
+        for (int i = 0; i < CONFIG_AES70_MAX_CONNECTIONS; i++) {
+            aes70_conn_t *c = &dev->conns[i];
+            if (!c->in_use) continue;
+#if CONFIG_AES70_ENABLE_TLS
+            /* Drive a pending handshake every tick so its deadline is honoured
+             * even when the peer sends nothing. */
+            if (c->handshaking) {
+                if (!tls_drive_handshake(dev, i, now)) close_conn(dev, i);
+                continue;
             }
-            for (int i = 0; i < CONFIG_AES70_MAX_CONNECTIONS; i++) {
-                aes70_conn_t *c = &dev->conns[i];
-                if (!c->in_use || !FD_ISSET(c->sock, &rfds)) continue;
-                int r = recv(c->sock, c->rx + c->rx_len, sizeof(c->rx) - c->rx_len, 0);
-                if (r <= 0) { close_conn(dev, i); continue; }
-                c->rx_len += (size_t)r;
-                c->last_rx_us = now;
-                if (!process_rx(dev, i)) close_conn(dev, i);
+            if (c->tls) {
+                if (n > 0 && FD_ISSET(c->sock, &rfds) && !tls_service_rx(dev, i, now))
+                    close_conn(dev, i);
+                continue;
             }
+#endif
+            if (n <= 0 || !FD_ISSET(c->sock, &rfds)) continue;
+            int r = recv(c->sock, c->rx + c->rx_len, sizeof(c->rx) - c->rx_len, 0);
+            if (r <= 0) { close_conn(dev, i); continue; }
+            c->rx_len += (size_t)r;
+            c->last_rx_us = now;
+            if (!process_rx(dev, i)) close_conn(dev, i);
         }
         service_keepalive(dev, now);
     }
@@ -302,10 +461,41 @@ static esp_err_t make_wake_pipe(aes70_device_t *dev)
 
 esp_err_t aes70_transport_start(aes70_device_t *dev)
 {
-    dev->listen_sock = make_listen_socket(dev->port);
-    if (dev->listen_sock < 0) {
-        ESP_LOGE(TAG, "cannot listen on TCP %u: errno %d", dev->port, errno);
-        return ESP_FAIL;
+    dev->listen_sock = dev->tls_listen_sock = -1;
+
+#if CONFIG_AES70_ENABLE_TLS
+    if (dev->cfg.tls.enable) {
+        if (!dev->cfg.tls.server_cert_pem || !dev->cfg.tls.server_key_pem) {
+            ESP_LOGE(TAG, "TLS enabled but server_cert_pem/server_key_pem missing");
+            return ESP_ERR_INVALID_ARG;
+        }
+        dev->tls_port = dev->cfg.tls.port ? dev->cfg.tls.port : AES70_DEFAULT_TLS_PORT;
+        dev->tls_listen_sock = make_listen_socket(dev->tls_port);
+        if (dev->tls_listen_sock < 0) {
+            ESP_LOGE(TAG, "cannot listen on TLS %u: errno %d", dev->tls_port, errno);
+            return ESP_FAIL;
+        }
+        ESP_LOGI(TAG, "secure OCP.1 (TLS%s) on %u",
+                 dev->cfg.tls.client_ca_pem ? "+client-auth" : "", dev->tls_port);
+    }
+#else
+    if (dev->cfg.tls.enable) {
+        ESP_LOGE(TAG, "TLS requested but CONFIG_AES70_ENABLE_TLS is not set");
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+#endif
+
+    /* The plaintext listener is opened unless TLS is configured to replace it. */
+    if (!dev->cfg.tls.disable_plaintext) {
+        dev->listen_sock = make_listen_socket(dev->port);
+        if (dev->listen_sock < 0) {
+            ESP_LOGE(TAG, "cannot listen on TCP %u: errno %d", dev->port, errno);
+            if (dev->tls_listen_sock >= 0) { close(dev->tls_listen_sock); dev->tls_listen_sock = -1; }
+            return ESP_FAIL;
+        }
+    } else if (dev->tls_listen_sock < 0) {
+        ESP_LOGE(TAG, "plaintext disabled and no TLS listener: nothing to listen on");
+        return ESP_ERR_INVALID_ARG;
     }
     make_wake_pipe(dev);   /* best-effort; without it sets apply on the next 500 ms tick */
 
@@ -318,7 +508,8 @@ esp_err_t aes70_transport_start(aes70_device_t *dev)
                                             prio, &dev->task, core);
     if (ok != pdPASS) {
         dev->running = false;
-        close(dev->listen_sock); dev->listen_sock = -1;
+        if (dev->listen_sock >= 0)     { close(dev->listen_sock);     dev->listen_sock = -1; }
+        if (dev->tls_listen_sock >= 0) { close(dev->tls_listen_sock); dev->tls_listen_sock = -1; }
         return ESP_ERR_NO_MEM;
     }
     return ESP_OK;
@@ -327,7 +518,8 @@ esp_err_t aes70_transport_start(aes70_device_t *dev)
 void aes70_transport_stop(aes70_device_t *dev)
 {
     if (!dev->running && !dev->task) {
-        if (dev->listen_sock >= 0) { close(dev->listen_sock); dev->listen_sock = -1; }
+        if (dev->listen_sock >= 0)     { close(dev->listen_sock);     dev->listen_sock = -1; }
+        if (dev->tls_listen_sock >= 0) { close(dev->tls_listen_sock); dev->tls_listen_sock = -1; }
         return;
     }
     dev->running = false;
@@ -340,7 +532,8 @@ void aes70_transport_stop(aes70_device_t *dev)
     }
     dev->task = NULL;
 
-    if (dev->listen_sock >= 0)    { close(dev->listen_sock);    dev->listen_sock = -1; }
-    if (dev->wake_recv_sock >= 0) { close(dev->wake_recv_sock); dev->wake_recv_sock = -1; }
-    if (dev->wake_send_sock >= 0) { close(dev->wake_send_sock); dev->wake_send_sock = -1; }
+    if (dev->listen_sock >= 0)     { close(dev->listen_sock);     dev->listen_sock = -1; }
+    if (dev->tls_listen_sock >= 0) { close(dev->tls_listen_sock); dev->tls_listen_sock = -1; }
+    if (dev->wake_recv_sock >= 0)  { close(dev->wake_recv_sock);  dev->wake_recv_sock = -1; }
+    if (dev->wake_send_sock >= 0)  { close(dev->wake_send_sock);  dev->wake_send_sock = -1; }
 }

@@ -157,6 +157,9 @@ typedef struct {
     int      sock;
     bool     secure;              /* connection is over TLS */
     bool     privileged;          /* may write secured objects (see aes70_authorize_cb_t) */
+    void    *tls;                 /* esp_tls_t* for a TLS connection, NULL for plaintext */
+    bool     handshaking;         /* TLS handshake not finished yet */
+    int64_t  hs_deadline_us;      /* drop the connection if the handshake outlasts this */
     char     addr[48];
     uint16_t port;
     uint8_t  rx[CONFIG_AES70_RX_BUFFER_SIZE];
@@ -192,6 +195,8 @@ struct aes70_device {
 
     uint16_t port;
     int      listen_sock;
+    int      tls_listen_sock;     /* secure (TLS) listener; -1 when not enabled */
+    uint16_t tls_port;
     int      wake_recv_sock;      /* UDP self-pipe read end (in the fd_set) */
     int      wake_send_sock;      /* UDP self-pipe write end (cmd_q signaling) */
     uint16_t wake_port;
@@ -318,6 +323,9 @@ int       aes70_conn_send(aes70_device_t *dev, int conn_idx, const uint8_t *buf,
 esp_err_t aes70_mdns_start(const char *hostname, uint16_t port,
                            const char *device_name, const char *manufacturer,
                            const char *model, const char *serial);
+esp_err_t aes70_mdns_add_secure(const char *hostname, uint16_t tls_port,
+                                const char *device_name, const char *manufacturer,
+                                const char *model, const char *serial);
 void      aes70_mdns_stop(void);
 
 #ifdef __cplusplus

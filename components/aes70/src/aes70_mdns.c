@@ -18,7 +18,8 @@
 #include "aes70_types.h"
 
 static const char *TAG = "aes70.mdns";
-static bool s_service_added;
+static bool s_service_added;          /* _oca._tcp (plaintext) */
+static bool s_secure_added;           /* _ocasec._tcp (TLS) */
 
 /* Display name -> safe DNS label: lowercase alnum + '-', <= 32 chars. */
 static void sanitize_hostname(const char *in, char *out, size_t outsz)
@@ -43,16 +44,11 @@ static void sanitize_hostname(const char *in, char *out, size_t outsz)
     out[j] = '\0';
 }
 
-esp_err_t aes70_mdns_start(const char *hostname, uint16_t port,
-                           const char *device_name, const char *manufacturer,
-                           const char *model, const char *serial)
+static esp_err_t ensure_mdns(const char *hostname, const char *device_name)
 {
     char host[33];
-    if (hostname && hostname[0]) {
-        strlcpy(host, hostname, sizeof(host));
-    } else {
-        sanitize_hostname(device_name, host, sizeof(host));
-    }
+    if (hostname && hostname[0]) strlcpy(host, hostname, sizeof(host));
+    else                         sanitize_hostname(device_name, host, sizeof(host));
 
     esp_err_t err = mdns_init();           /* safe if the app already called it */
     if (err != ESP_OK) {
@@ -60,7 +56,12 @@ esp_err_t aes70_mdns_start(const char *hostname, uint16_t port,
         return err;
     }
     mdns_hostname_set(host);
+    return ESP_OK;
+}
 
+static esp_err_t add_service(const char *device_name, const char *type, uint16_t port,
+                             const char *manufacturer, const char *model, const char *serial)
+{
     mdns_txt_item_t txt[] = {
         { "txtvers",      "1" },
         { "protocol",     "OCP.1" },
@@ -68,17 +69,38 @@ esp_err_t aes70_mdns_start(const char *hostname, uint16_t port,
         { "model",        (char *)(model        ? model        : "") },
         { "serial",       (char *)(serial       ? serial       : "") },
     };
-
-    err = mdns_service_add(device_name, AES70_MDNS_SERVICE_TYPE, AES70_MDNS_SERVICE_PROTO,
-                           port, txt, sizeof(txt) / sizeof(txt[0]));
+    esp_err_t err = mdns_service_add(device_name, type, AES70_MDNS_SERVICE_PROTO,
+                                     port, txt, sizeof(txt) / sizeof(txt[0]));
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "mdns_service_add failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "mdns_service_add(%s) failed: %s", type, esp_err_to_name(err));
         return err;
     }
-    s_service_added = true;
-    ESP_LOGI(TAG, "advertising %s.%s.%s on %s.local:%u",
-             device_name, AES70_MDNS_SERVICE_TYPE, AES70_MDNS_SERVICE_PROTO, host, port);
+    ESP_LOGI(TAG, "advertising %s.%s.%s on :%u",
+             device_name, type, AES70_MDNS_SERVICE_PROTO, port);
     return ESP_OK;
+}
+
+esp_err_t aes70_mdns_start(const char *hostname, uint16_t port,
+                           const char *device_name, const char *manufacturer,
+                           const char *model, const char *serial)
+{
+    esp_err_t err = ensure_mdns(hostname, device_name);
+    if (err != ESP_OK) return err;
+    err = add_service(device_name, AES70_MDNS_SERVICE_TYPE, port, manufacturer, model, serial);
+    if (err == ESP_OK) s_service_added = true;
+    return err;
+}
+
+esp_err_t aes70_mdns_add_secure(const char *hostname, uint16_t tls_port,
+                                const char *device_name, const char *manufacturer,
+                                const char *model, const char *serial)
+{
+    esp_err_t err = ensure_mdns(hostname, device_name);
+    if (err != ESP_OK) return err;
+    err = add_service(device_name, AES70_MDNS_SECURE_SERVICE_TYPE, tls_port,
+                      manufacturer, model, serial);
+    if (err == ESP_OK) s_secure_added = true;
+    return err;
 }
 
 void aes70_mdns_stop(void)
@@ -86,6 +108,10 @@ void aes70_mdns_stop(void)
     if (s_service_added) {
         mdns_service_remove(AES70_MDNS_SERVICE_TYPE, AES70_MDNS_SERVICE_PROTO);
         s_service_added = false;
+    }
+    if (s_secure_added) {
+        mdns_service_remove(AES70_MDNS_SECURE_SERVICE_TYPE, AES70_MDNS_SERVICE_PROTO);
+        s_secure_added = false;
     }
     /* Intentionally not calling mdns_free(): the application may use mDNS too. */
 }

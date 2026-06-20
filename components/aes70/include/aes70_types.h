@@ -153,9 +153,14 @@ typedef enum {
  * from mDNS), but a stable default eases manual connections. */
 #define AES70_DEFAULT_TCP_PORT          65000
 
+/* Default port for secure OCP.1 (OCP.1 over TLS). */
+#define AES70_DEFAULT_TLS_PORT          65001
+
 /* DNS-SD service type advertised for discovery (insecure OCP.1 / TCP). */
 #define AES70_MDNS_SERVICE_TYPE         "_oca"
 #define AES70_MDNS_SERVICE_PROTO        "_tcp"
+/* DNS-SD service type for secure OCP.1 (OCP.1 over TLS). */
+#define AES70_MDNS_SECURE_SERVICE_TYPE  "_ocasec"
 
 /* Opaque handles. The struct tags are also exposed as typedefs for internal
  * use; application code should treat them as opaque and use the handle types. */

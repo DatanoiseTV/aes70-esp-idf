@@ -58,4 +58,26 @@ menu "AES70 (OCA) device"
         range 1 24
         default 5
 
+    config AES70_ENABLE_TLS
+        bool "Enable secure OCP.1 (OCP.1 over TLS)"
+        default n
+        help
+            Compile in a TLS listener for secure OCP.1, advertised as
+            _ocasec._tcp. Pass the server certificate/key (and optionally a
+            client CA for mutual authentication) through aes70_device_config_t.
+            A mutually-authenticated controller becomes "privileged" and may
+            write objects marked secured with aes70_object_set_secured().
+            Pulls in the esp-tls / mbedTLS stack; leave off if you do not need
+            transport security.
+
+    config AES70_TLS_HANDSHAKE_TIMEOUT_MS
+        int "TLS handshake timeout (ms)"
+        depends on AES70_ENABLE_TLS
+        range 1000 60000
+        default 8000
+        help
+            A connection whose TLS handshake does not complete within this
+            window is dropped, so a client that stalls mid-handshake cannot
+            tie up a connection slot.
+
 endmenu
