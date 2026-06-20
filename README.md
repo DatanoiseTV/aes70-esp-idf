@@ -122,8 +122,64 @@ rather than silently omitted:
 - Control grouping agents (OcaGrouper) and matrix (OcaMatrix).
 - Reconfigurable-DSP construction (`OcaBlock.ConstructActionObject`).
 - Firmware-update manager and the other optional managers.
-- OCP.1 over TLS (`_ocasec._tcp`) and OCP.1 authentication.
 - IPv6 listener (the server currently binds IPv4 `INADDR_ANY`).
+
+## Access control and TLS
+
+Plain OCP.1 is unauthenticated: by default any controller that can reach the
+device may read and write every object. Two mechanisms let you tighten that.
+
+**Secured objects.** Mark an object so writes require a privileged session:
+
+```c
+aes70_object_handle_t xover = aes70_filter_create(dev, blk, "Split", ...);
+aes70_object_set_secured(xover, true);   /* installer-only from now on */
+```
+
+A secured object can still be *read* by anyone, but any `Set*` (or `Lock`) from
+an unprivileged session is rejected with OcaStatus `PermissionDenied`. `OcaLock`
+is also enforced: a `NoWrite`/`NoReadWrite` lock blocks writes from every session
+but the one that set it.
+
+**Who is privileged.** A connection's privilege is decided once, when it opens,
+by the `authorize` callback in `aes70_device_config_t`:
+
+```c
+cfg.authorize = my_authorize;   /* bool(peer, secure, client_authenticated, user) */
+```
+
+If you leave it `NULL`, the default policy is *privileged only for a
+mutually-authenticated TLS client* — plaintext controllers are never privileged.
+
+**Secure OCP.1 (TLS).** Enable `CONFIG_AES70_ENABLE_TLS` and pass a certificate
+through the config to run an OCP.1-over-TLS listener, advertised as
+`_ocasec._tcp`:
+
+```c
+cfg.tls.enable          = true;
+cfg.tls.server_cert_pem = server_cert;   /* PEM */
+cfg.tls.server_key_pem  = server_key;    /* PEM */
+cfg.tls.client_ca_pem   = client_ca;     /* PEM; set => require & verify client certs */
+// cfg.tls.disable_plaintext = true;     /* optional: TLS only */
+```
+
+With `client_ca_pem` set, a controller must present a certificate that verifies
+against that CA; once it does, its session is privileged and may write secured
+objects. The handshake is non-blocking with a bounded timeout so a stalled
+client cannot tie up a connection slot. When TLS is left off, none of the
+esp-tls/mbedTLS code is compiled into the image.
+
+## Testing
+
+Pure logic (codec, command router, access control) has host unit tests that
+build with plain `gcc` — no ESP-IDF, no hardware:
+
+```sh
+components/aes70/test/host/run.sh        # builds, runs, prints gcov coverage
+```
+
+`tools/ocp1_smoketest.py` is an integration test that drives a running device
+over OCP.1.
 
 ## Protocol fidelity
 

@@ -191,21 +191,31 @@ static void build_dsp_tree(aes70_device_handle_t dev)
     make_mb_band(dev, mb, "Mid",  AES70_PASSBAND_BANDPASS, 1500.0f);
     make_mb_band(dev, mb, "High", AES70_PASSBAND_HIPASS,   3000.0f);
 
-    /* Limiter (OcaDynamics configured as a limiter). */
+    /* Limiter (OcaDynamics configured as a limiter). The limiter shapes the
+     * output protection and is marked secured: an ordinary (unprivileged)
+     * controller can read it but cannot change it. With TLS enabled a
+     * mutually-authenticated controller is privileged and may. */
     aes70_object_handle_t lim = aes70_block_create(dev, NULL, "Limiter");
-    track(aes70_dynamics_create(dev, lim, "Dynamics", AES70_DYN_LIMIT), "Limiter", T_DYNAMICS);
+    aes70_object_handle_t lim_dyn =
+        track(aes70_dynamics_create(dev, lim, "Dynamics", AES70_DYN_LIMIT), "Limiter", T_DYNAMICS);
+    aes70_object_set_secured(lim_dyn, true);
     track(aes70_boolean_create(dev, lim, "Bypass", false),             "Lim Bypass", T_BOOL);
 
-    /* 2-way crossover. */
+    /* 2-way crossover. The split filters define the system tuning, so they are
+     * secured too; the per-band gain and mute stay open for normal operation. */
     aes70_object_handle_t xover = aes70_block_create(dev, NULL, "Crossover");
     aes70_object_handle_t low = aes70_block_create(dev, xover, "LowBand");
-    track(aes70_filter_create(dev, low, "LowPass", AES70_PASSBAND_LOWPASS,
-                              AES70_FILTER_LINKWITZ_RILEY, 2000.0f, 4), "Low XO Filter", T_FILTER);
+    aes70_object_handle_t lpf =
+        track(aes70_filter_create(dev, low, "LowPass", AES70_PASSBAND_LOWPASS,
+                                  AES70_FILTER_LINKWITZ_RILEY, 2000.0f, 4), "Low XO Filter", T_FILTER);
+    aes70_object_set_secured(lpf, true);
     track(aes70_gain_create(dev, low, "Gain", -24.0f, 6.0f, 0.0f), "Low Gain", T_GAIN);
     track(aes70_mute_create(dev, low, "Mute", false),              "Low Mute", T_MUTE);
     aes70_object_handle_t high = aes70_block_create(dev, xover, "HighBand");
-    track(aes70_filter_create(dev, high, "HighPass", AES70_PASSBAND_HIPASS,
-                              AES70_FILTER_LINKWITZ_RILEY, 2000.0f, 4), "High XO Filter", T_FILTER);
+    aes70_object_handle_t hpf =
+        track(aes70_filter_create(dev, high, "HighPass", AES70_PASSBAND_HIPASS,
+                                  AES70_FILTER_LINKWITZ_RILEY, 2000.0f, 4), "High XO Filter", T_FILTER);
+    aes70_object_set_secured(hpf, true);
     track(aes70_gain_create(dev, high, "Gain", -24.0f, 6.0f, 0.0f), "High Gain", T_GAIN);
     track(aes70_mute_create(dev, high, "Mute", false),             "High Mute", T_MUTE);
 

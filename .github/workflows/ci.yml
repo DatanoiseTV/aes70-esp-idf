@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  host-tests:
+    name: Host unit tests (gcc + gcov)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run unit tests
+        run: components/aes70/test/host/run.sh
+
+  idf-build:
+    name: ESP-IDF build (esp32p4)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        idf: [release-v5.3, release-v5.4]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build example
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: ${{ matrix.idf }}
+          target: esp32p4
+          path: examples/p4_nano_dsp

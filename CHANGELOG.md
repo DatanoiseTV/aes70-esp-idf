@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-06-20
+
+### Added
+
+- **Per-object access control.** `aes70_object_set_secured()` marks an object
+  so any state-changing method (Set*, Lock) is rejected with OcaStatus
+  `PermissionDenied` unless the controller's session is privileged; reads stay
+  open. Use it to protect parameters such as crossover and limiter from
+  unprivileged controllers.
+- **Per-connection privilege**, decided by a new `authorize` callback in
+  `aes70_device_config_t` (default: privileged only for a mutually-authenticated
+  TLS client).
+- **Optional TLS transport (secure OCP.1)** behind `CONFIG_AES70_ENABLE_TLS`:
+  a TLS listener advertised as `_ocasec._tcp`, with a non-blocking handshake,
+  a per-connection handshake timeout, and optional mutual authentication via a
+  client CA. Configured through `aes70_device_config_t.tls`; can also disable
+  the plaintext listener.
+- **Host unit tests** (`components/aes70/test/host`): plain-C, no ESP-IDF,
+  covering the OCP.1 codec, command router and access-control logic with gcov
+  line coverage.
+
+### Changed
+
+- **OcaLock is now enforced.** A `NoWrite`/`NoReadWrite` lock blocks writes from
+  every session but the lock owner, and a dropped connection releases its locks.
+  Previously the lock state was stored but never checked.
+
 ## [0.1.0] - 2026-06-19
 
 ### Added
