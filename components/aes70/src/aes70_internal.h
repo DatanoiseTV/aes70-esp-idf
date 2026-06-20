@@ -76,6 +76,7 @@ typedef enum {
     AES70_K_PANBALANCE,       /* OcaPanBalance */
     AES70_K_SIGNAL_GEN,       /* OcaSignalGenerator */
     AES70_K_GROUPER,          /* OcaGrouper (grouping agent) */
+    AES70_K_MATRIX,           /* OcaMatrix (coordinate-addressable grid) */
     AES70_K_DEVICE_MANAGER,
     AES70_K_SUBSCRIPTION_MANAGER,
     AES70_K_COUNT
@@ -273,6 +274,11 @@ aes70_status_t aes70_grouper_dispatch(struct aes70_object *obj, uint16_t idx,
                                       ocp1_rd_t *in, ocp1_wr_t *out, uint8_t *pc);
 void aes70_grouper_init(struct aes70_object *obj, aes70_kind_t citizen_kind);
 void aes70_grouper_on_commit(aes70_device_t *dev, struct aes70_object *written);
+
+/* ---- OcaMatrix (aes70_matrix.c) ----------------------------------------- */
+aes70_status_t aes70_matrix_dispatch(struct aes70_object *obj, uint16_t idx,
+                                     ocp1_rd_t *in, ocp1_wr_t *out, uint8_t *pc);
+void aes70_matrix_init(struct aes70_object *obj, uint16_t x_size, uint16_t y_size);
 /* The (level,index) of an object's primary value property; false if none. */
 bool aes70_object_primary_property(struct aes70_object *obj, uint16_t *level, uint16_t *index);
 

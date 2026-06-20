@@ -382,6 +382,7 @@ aes70_status_t aes70_agent_dispatch(struct aes70_object *obj, uint16_t idx,
 /* Reusable level-handler arrays. */
 static const aes70_method_fn lv_block[]   = { aes70_root_dispatch, aes70_worker_dispatch, aes70_block_dispatch };
 static const aes70_method_fn lv_grouper[] = { aes70_root_dispatch, aes70_agent_dispatch, aes70_grouper_dispatch };
+static const aes70_method_fn lv_matrix[]  = { aes70_root_dispatch, aes70_worker_dispatch, aes70_matrix_dispatch };
 static const aes70_method_fn lv_gain[]    = { aes70_root_dispatch, aes70_worker_dispatch, NULL, gain_dispatch };
 static const aes70_method_fn lv_mute[]    = { aes70_root_dispatch, aes70_worker_dispatch, NULL, state2_dispatch };
 static const aes70_method_fn lv_pol[]     = { aes70_root_dispatch, aes70_worker_dispatch, NULL, state2_dispatch };
@@ -420,6 +421,7 @@ static const uint16_t cid_peq[]      = { 1, 1, 1, 10 };
 static const uint16_t cid_pan[]      = { 1, 1, 1, 6 };
 static const uint16_t cid_siggen[]   = { 1, 1, 1, 17 };
 static const uint16_t cid_grouper[]  = { 1, 2, 2 };
+static const uint16_t cid_matrix[]   = { 1, 1, 5 };
 static const uint16_t cid_devmgr[]   = { 1, 3, 1 };
 static const uint16_t cid_submgr[]   = { 1, 3, 4 };
 
@@ -446,6 +448,7 @@ static const aes70_class_desc_t k_desc[AES70_K_COUNT] = {
     [AES70_K_PANBALANCE]   = { cid_pan, 4, 3, lv_pan, "OcaPanBalance" },
     [AES70_K_SIGNAL_GEN]   = { cid_siggen, 4, 3, lv_siggen, "OcaSignalGenerator" },
     [AES70_K_GROUPER]      = { cid_grouper, 3, 3, lv_grouper, "OcaGrouper" },
+    [AES70_K_MATRIX]       = { cid_matrix,  3, 4, lv_matrix,  "OcaMatrix" },
     [AES70_K_DEVICE_MANAGER]       = { cid_devmgr, 3, 3, lv_devmgr, "OcaDeviceManager" },
     [AES70_K_SUBSCRIPTION_MANAGER] = { cid_submgr, 3, 4, lv_submgr, "OcaSubscriptionManager" },
 };

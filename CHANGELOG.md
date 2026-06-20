@@ -18,6 +18,12 @@ adheres to [Semantic Versioning](https://semver.org/).
   level (GetLabel/SetLabel/GetOwner/GetPath) and host unit tests for the full
   add/enroll/fan-out flow. Remote (cross-device) citizens are reported
   NotImplemented.
+- **OcaMatrix** (ClassID 1.1.5), a coordinate-addressable grid of member
+  objects: `aes70_matrix_create()` / `aes70_matrix_set_member()`, with the full
+  addressing surface (Get/SetCurrentXY, Get/SetSize, Get/SetMembers via
+  OcaList2D, Get/SetMember, Get/SetProxy, ports-per-row/column, current-XY
+  lock) and host tests. The batch operations ExecuteMethod/ExecuteCommands
+  return NotImplemented.
 
 ## [0.2.0] - 2026-06-20
 

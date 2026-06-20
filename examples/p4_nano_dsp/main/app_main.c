@@ -225,6 +225,9 @@ static void build_dsp_tree(aes70_device_handle_t dev)
     aes70_object_handle_t groups = aes70_block_create(dev, NULL, "Groups");
     aes70_grouper_create(dev, groups, "GainGroups", AES70_GROUPER_GAIN);
 
+    /* A 2x2 routing matrix (coordinate-addressable grid of members). */
+    aes70_matrix_create(dev, groups, "Router", 2, 2);
+
     /* System: real chip temperature + identify. */
     aes70_object_handle_t sys = aes70_block_create(dev, NULL, "System");
     s_temp = aes70_temperature_create(dev, sys, "ChipTemp", -10.0f, 125.0f);

@@ -262,6 +262,17 @@ aes70_object_handle_t aes70_grouper_create(aes70_device_handle_t dev, aes70_obje
                                            const char *role,
                                            aes70_grouper_citizen_class_t citizen_class);
 
+/* ---- OcaMatrix (coordinate-addressable grid, ClassID 1.1.5) ------------- *
+ * A rectangular grid of member objects with a current (X,Y) selection, a proxy
+ * and per-row/column port counts -- the model behind a router/mixer crosspoint
+ * array. Create it with the initial size (max 16x16), populate cells with
+ * aes70_matrix_set_member() (1-based coordinates), and controllers address it
+ * via Get/SetMember(s), Get/SetCurrentXY and Get/SetSize. */
+aes70_object_handle_t aes70_matrix_create(aes70_device_handle_t dev, aes70_object_handle_t parent,
+                                          const char *role, uint16_t x_size, uint16_t y_size);
+esp_err_t aes70_matrix_set_member(aes70_object_handle_t matrix, uint16_t x, uint16_t y,
+                                  aes70_object_handle_t member);
+
 #ifdef __cplusplus
 }
 #endif

@@ -135,6 +135,7 @@ recommended next check.
 | OcaTemperatureSensor | 1.1.2.5 | temperature reading (device reports) |
 | OcaIdentificationActuator | 1.1.1.21 | identify (locate the device) |
 | OcaGrouper | 1.2.2 | grouping agent: one write drives all enrolled members |
+| OcaMatrix | 1.1.5 | coordinate-addressable grid of members (router / mixer) |
 
 `OcaDynamics`, `OcaFilterClassical`, `OcaFilterParametric`, `OcaPanBalance` and
 `OcaSignalGenerator` carry their whole parameter set in one object, so a
@@ -165,7 +166,8 @@ rather than silently omitted:
 
 - Connection management (OcaStreamConnector / media-transport adaptations).
 - Snapshot/preset library (OcaLibraryManager, dataset objects).
-- Matrix (OcaMatrix).
+- Matrix batch ops (`OcaMatrix.ExecuteMethod` / `ExecuteCommands`); the matrix
+  grid, addressing and members are implemented.
 - Reconfigurable-DSP construction (`OcaBlock.ConstructActionObject`).
 - Firmware-update manager and the other optional managers.
 

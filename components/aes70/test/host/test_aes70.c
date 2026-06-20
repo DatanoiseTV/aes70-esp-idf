@@ -318,6 +318,70 @@ static void test_grouper(void)
     aes70_device_stop(dev);
 }
 
+static void test_matrix(void)
+{
+    aes70_device_config_t cfg; aes70_device_config_default(&cfg);
+    cfg.device_name = "DSP"; cfg.manufacturer = "M"; cfg.model = "X"; cfg.enable_mdns = false;
+    aes70_device_handle_t dev; aes70_device_start(&cfg, &dev);
+
+    aes70_object_handle_t mx = aes70_matrix_create(dev, NULL, "Router", 3, 2);  /* 3 cols x 2 rows */
+    uint32_t ono = aes70_object_ono(mx);
+    aes70_object_handle_t g = aes70_gain_create(dev, NULL, "Cell", -80, 12, 0);
+    aes70_matrix_set_member(mx, 2, 1, g);                                        /* app populates (x=2,y=1) */
+    conn_set((aes70_device_t *)dev, 0, false);
+
+    uint8_t p[64], rp[64]; size_t rl; uint8_t st; ocp1_wr_t w; ocp1_rd_t r;
+
+    /* GetSize -> (xSize=3, ySize=2, minX, maxX, minY, maxY) */
+    st = route_cmd((aes70_device_t *)dev, 0, ono, 3, 3, NULL, 0, rp, &rl);
+    CHECK(st == AES70_OK, "GetSize = %u", st);
+    ocp1_rd_init(&r, rp, rl);
+    CHECK(ocp1_rd_u16(&r) == 3 && ocp1_rd_u16(&r) == 2, "matrix size 3x2");
+
+    /* GetMember(2,1) returns the app-set member ONo. */
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u16(&w, 2); ocp1_wr_u16(&w, 1);
+    st = route_cmd((aes70_device_t *)dev, 0, ono, 3, 7, p, w.off, rp, &rl);
+    CHECK(st == AES70_OK, "GetMember = %u", st);
+    ocp1_rd_init(&r, rp, rl);
+    CHECK(ocp1_rd_u32(&r) == aes70_object_ono(g), "member(2,1) == gain ONo");
+
+    /* SetMember(1,2, gain) then GetMember(1,2) round-trips. */
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u16(&w, 1); ocp1_wr_u16(&w, 2); ocp1_wr_u32(&w, aes70_object_ono(g));
+    st = route_cmd((aes70_device_t *)dev, 0, ono, 3, 8, p, w.off, NULL, NULL);
+    CHECK(st == AES70_OK, "SetMember = %u", st);
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u16(&w, 1); ocp1_wr_u16(&w, 2);
+    st = route_cmd((aes70_device_t *)dev, 0, ono, 3, 7, p, w.off, rp, &rl);
+    ocp1_rd_init(&r, rp, rl);
+    CHECK(st == AES70_OK && ocp1_rd_u32(&r) == aes70_object_ono(g), "SetMember round-trip");
+
+    /* Out-of-range member access rejected. */
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u16(&w, 9); ocp1_wr_u16(&w, 9);
+    st = route_cmd((aes70_device_t *)dev, 0, ono, 3, 7, p, w.off, NULL, NULL);
+    CHECK(st == AES70_PARAMETER_OUT_OF_RANGE, "out-of-range GetMember = %u", st);
+
+    /* SetCurrentXY(2,1) then GetCurrentXY. */
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u16(&w, 2); ocp1_wr_u16(&w, 1);
+    st = route_cmd((aes70_device_t *)dev, 0, ono, 3, 2, p, w.off, NULL, NULL);
+    CHECK(st == AES70_OK, "SetCurrentXY = %u", st);
+    st = route_cmd((aes70_device_t *)dev, 0, ono, 3, 1, NULL, 0, rp, &rl);
+    ocp1_rd_init(&r, rp, rl);
+    CHECK(st == AES70_OK && ocp1_rd_u16(&r) == 2 && ocp1_rd_u16(&r) == 1, "current XY = (2,1)");
+
+    /* Lock the current XY; SetCurrentXY then returns Locked until UnlockCurrent. */
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u16(&w, 1); ocp1_wr_u16(&w, 1);
+    route_cmd((aes70_device_t *)dev, 0, ono, 3, 15, p, w.off, NULL, NULL);          /* SetCurrentXYLock */
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u16(&w, 3); ocp1_wr_u16(&w, 2);
+    st = route_cmd((aes70_device_t *)dev, 0, ono, 3, 2, p, w.off, NULL, NULL);
+    CHECK(st == AES70_LOCKED, "SetCurrentXY while locked = %u", st);
+    st = route_cmd((aes70_device_t *)dev, 0, ono, 3, 16, NULL, 0, NULL, NULL);      /* UnlockCurrent */
+    CHECK(st == AES70_OK, "UnlockCurrent = %u", st);
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u16(&w, 3); ocp1_wr_u16(&w, 2);
+    st = route_cmd((aes70_device_t *)dev, 0, ono, 3, 2, p, w.off, NULL, NULL);
+    CHECK(st == AES70_OK, "SetCurrentXY after unlock = %u", st);
+
+    aes70_device_stop(dev);
+}
+
 int main(void)
 {
     printf("AES70 host unit tests\n");
@@ -327,6 +391,7 @@ int main(void)
     test_locking();
     test_bad_ono();
     test_grouper();
+    test_matrix();
     printf("%d checks, %d failures\n", g_checks, g_fails);
     return g_fails ? 1 : 0;
 }
