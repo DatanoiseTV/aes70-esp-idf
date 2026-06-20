@@ -194,8 +194,10 @@ struct aes70_device {
     uint8_t  model_guid[8];      /* OcaModelGUID: Reserved[1]+MfrCode[3]+ModelCode[4] */
 
     uint16_t port;
-    int      listen_sock;
-    int      tls_listen_sock;     /* secure (TLS) listener; -1 when not enabled */
+    int      listen_sock;         /* plaintext IPv4 listener; -1 when not open */
+    int      listen_sock6;        /* plaintext IPv6 listener; -1 when not open */
+    int      tls_listen_sock;     /* secure (TLS) IPv4 listener; -1 when not enabled */
+    int      tls_listen_sock6;    /* secure (TLS) IPv6 listener; -1 when not enabled */
     uint16_t tls_port;
     int      wake_recv_sock;      /* UDP self-pipe read end (in the fd_set) */
     int      wake_send_sock;      /* UDP self-pipe write end (cmd_q signaling) */

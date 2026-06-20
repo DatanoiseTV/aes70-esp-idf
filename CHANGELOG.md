@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **IPv6 listener.** The OCP.1 server (and the TLS listener) now also accept
+  connections over IPv6 via a separate dual listener, in addition to IPv4.
+  Falls back to IPv4-only when lwIP IPv6 is disabled.
+
 ## [0.2.0] - 2026-06-20
 
 ### Added

@@ -162,11 +162,11 @@ static bool process_rx(aes70_device_t *dev, int conn_idx)
 }
 
 /* ---- Accept ------------------------------------------------------------- */
-static void accept_conn(aes70_device_t *dev)
+static void accept_conn(aes70_device_t *dev, int listen_fd)
 {
     struct sockaddr_storage src;
     socklen_t slen = sizeof(src);
-    int s = accept(dev->listen_sock, (struct sockaddr *)&src, &slen);
+    int s = accept(listen_fd, (struct sockaddr *)&src, &slen);
     if (s < 0) return;
 
     int slot = -1;
@@ -218,11 +218,11 @@ static unsigned pem_len(const char *p) { return p ? (unsigned)strlen(p) + 1u : 0
 
 /* Accept on the TLS listener and start a non-blocking handshake. CONN_OPENED is
  * deferred to tls_drive_handshake() so it only fires for a real secure session. */
-static void accept_tls_conn(aes70_device_t *dev)
+static void accept_tls_conn(aes70_device_t *dev, int listen_fd)
 {
     struct sockaddr_storage src;
     socklen_t slen = sizeof(src);
-    int s = accept(dev->tls_listen_sock, (struct sockaddr *)&src, &slen);
+    int s = accept(listen_fd, (struct sockaddr *)&src, &slen);
     if (s < 0) return;
 
     int slot = -1;
@@ -360,9 +360,11 @@ static void server_task(void *arg)
         fd_set rfds;
         FD_ZERO(&rfds);
         int maxfd = -1;
-        if (dev->listen_sock >= 0)     { FD_SET(dev->listen_sock, &rfds);     if (dev->listen_sock > maxfd)     maxfd = dev->listen_sock; }
-        if (dev->tls_listen_sock >= 0) { FD_SET(dev->tls_listen_sock, &rfds); if (dev->tls_listen_sock > maxfd) maxfd = dev->tls_listen_sock; }
-        if (dev->wake_recv_sock >= 0)  { FD_SET(dev->wake_recv_sock, &rfds);  if (dev->wake_recv_sock > maxfd)  maxfd = dev->wake_recv_sock; }
+        if (dev->listen_sock >= 0)      { FD_SET(dev->listen_sock, &rfds);      if (dev->listen_sock > maxfd)      maxfd = dev->listen_sock; }
+        if (dev->listen_sock6 >= 0)     { FD_SET(dev->listen_sock6, &rfds);     if (dev->listen_sock6 > maxfd)     maxfd = dev->listen_sock6; }
+        if (dev->tls_listen_sock >= 0)  { FD_SET(dev->tls_listen_sock, &rfds);  if (dev->tls_listen_sock > maxfd)  maxfd = dev->tls_listen_sock; }
+        if (dev->tls_listen_sock6 >= 0) { FD_SET(dev->tls_listen_sock6, &rfds); if (dev->tls_listen_sock6 > maxfd) maxfd = dev->tls_listen_sock6; }
+        if (dev->wake_recv_sock >= 0)   { FD_SET(dev->wake_recv_sock, &rfds);   if (dev->wake_recv_sock > maxfd)   maxfd = dev->wake_recv_sock; }
         for (int i = 0; i < CONFIG_AES70_MAX_CONNECTIONS; i++) {
             if (dev->conns[i].in_use) {
                 FD_SET(dev->conns[i].sock, &rfds);
@@ -381,10 +383,14 @@ static void server_task(void *arg)
                 drain_cmd_queue(dev);
             }
             if (dev->listen_sock >= 0 && FD_ISSET(dev->listen_sock, &rfds))
-                accept_conn(dev);
+                accept_conn(dev, dev->listen_sock);
+            if (dev->listen_sock6 >= 0 && FD_ISSET(dev->listen_sock6, &rfds))
+                accept_conn(dev, dev->listen_sock6);
 #if CONFIG_AES70_ENABLE_TLS
             if (dev->tls_listen_sock >= 0 && FD_ISSET(dev->tls_listen_sock, &rfds))
-                accept_tls_conn(dev);
+                accept_tls_conn(dev, dev->tls_listen_sock);
+            if (dev->tls_listen_sock6 >= 0 && FD_ISSET(dev->tls_listen_sock6, &rfds))
+                accept_tls_conn(dev, dev->tls_listen_sock6);
 #endif
         }
 
@@ -436,6 +442,26 @@ static int make_listen_socket(uint16_t port)
     return s;
 }
 
+/* IPv6 listener (separate socket, V6ONLY so it never clashes with the IPv4
+ * listener on the same port). Best-effort: returns -1 if IPv6 is unavailable
+ * (e.g. CONFIG_LWIP_IPV6 disabled), in which case the device stays IPv4-only. */
+static int make_listen_socket6(uint16_t port)
+{
+    int s = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
+    if (s < 0) return -1;
+    int one = 1;
+    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &one, sizeof(one));
+    struct sockaddr_in6 addr = {
+        .sin6_family = AF_INET6,
+        .sin6_addr   = IN6ADDR_ANY_INIT,
+        .sin6_port   = htons(port),
+    };
+    if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) { close(s); return -1; }
+    if (listen(s, CONFIG_AES70_MAX_CONNECTIONS) < 0) { close(s); return -1; }
+    return s;
+}
+
 /* A loopback UDP pair: aes70_post_set() sends one byte to wake select(). */
 static esp_err_t make_wake_pipe(aes70_device_t *dev)
 {
@@ -459,9 +485,18 @@ static esp_err_t make_wake_pipe(aes70_device_t *dev)
     return ESP_OK;
 }
 
+static void close_listeners(aes70_device_t *dev)
+{
+    if (dev->listen_sock >= 0)      { close(dev->listen_sock);      dev->listen_sock = -1; }
+    if (dev->listen_sock6 >= 0)     { close(dev->listen_sock6);     dev->listen_sock6 = -1; }
+    if (dev->tls_listen_sock >= 0)  { close(dev->tls_listen_sock);  dev->tls_listen_sock = -1; }
+    if (dev->tls_listen_sock6 >= 0) { close(dev->tls_listen_sock6); dev->tls_listen_sock6 = -1; }
+}
+
 esp_err_t aes70_transport_start(aes70_device_t *dev)
 {
-    dev->listen_sock = dev->tls_listen_sock = -1;
+    dev->listen_sock = dev->listen_sock6 = -1;
+    dev->tls_listen_sock = dev->tls_listen_sock6 = -1;
 
 #if CONFIG_AES70_ENABLE_TLS
     if (dev->cfg.tls.enable) {
@@ -475,8 +510,10 @@ esp_err_t aes70_transport_start(aes70_device_t *dev)
             ESP_LOGE(TAG, "cannot listen on TLS %u: errno %d", dev->tls_port, errno);
             return ESP_FAIL;
         }
-        ESP_LOGI(TAG, "secure OCP.1 (TLS%s) on %u",
-                 dev->cfg.tls.client_ca_pem ? "+client-auth" : "", dev->tls_port);
+        dev->tls_listen_sock6 = make_listen_socket6(dev->tls_port);   /* best-effort IPv6 */
+        ESP_LOGI(TAG, "secure OCP.1 (TLS%s) on %u (IPv4%s)",
+                 dev->cfg.tls.client_ca_pem ? "+client-auth" : "", dev->tls_port,
+                 dev->tls_listen_sock6 >= 0 ? "+IPv6" : "");
     }
 #else
     if (dev->cfg.tls.enable) {
@@ -490,9 +527,13 @@ esp_err_t aes70_transport_start(aes70_device_t *dev)
         dev->listen_sock = make_listen_socket(dev->port);
         if (dev->listen_sock < 0) {
             ESP_LOGE(TAG, "cannot listen on TCP %u: errno %d", dev->port, errno);
-            if (dev->tls_listen_sock >= 0) { close(dev->tls_listen_sock); dev->tls_listen_sock = -1; }
+            if (dev->tls_listen_sock >= 0)  { close(dev->tls_listen_sock);  dev->tls_listen_sock = -1; }
+            if (dev->tls_listen_sock6 >= 0) { close(dev->tls_listen_sock6); dev->tls_listen_sock6 = -1; }
             return ESP_FAIL;
         }
+        dev->listen_sock6 = make_listen_socket6(dev->port);   /* best-effort IPv6 */
+        ESP_LOGI(TAG, "OCP.1 on TCP %u (IPv4%s)", dev->port,
+                 dev->listen_sock6 >= 0 ? "+IPv6" : "");
     } else if (dev->tls_listen_sock < 0) {
         ESP_LOGE(TAG, "plaintext disabled and no TLS listener: nothing to listen on");
         return ESP_ERR_INVALID_ARG;
@@ -508,8 +549,7 @@ esp_err_t aes70_transport_start(aes70_device_t *dev)
                                             prio, &dev->task, core);
     if (ok != pdPASS) {
         dev->running = false;
-        if (dev->listen_sock >= 0)     { close(dev->listen_sock);     dev->listen_sock = -1; }
-        if (dev->tls_listen_sock >= 0) { close(dev->tls_listen_sock); dev->tls_listen_sock = -1; }
+        close_listeners(dev);
         return ESP_ERR_NO_MEM;
     }
     return ESP_OK;
@@ -518,8 +558,7 @@ esp_err_t aes70_transport_start(aes70_device_t *dev)
 void aes70_transport_stop(aes70_device_t *dev)
 {
     if (!dev->running && !dev->task) {
-        if (dev->listen_sock >= 0)     { close(dev->listen_sock);     dev->listen_sock = -1; }
-        if (dev->tls_listen_sock >= 0) { close(dev->tls_listen_sock); dev->tls_listen_sock = -1; }
+        close_listeners(dev);
         return;
     }
     dev->running = false;
@@ -532,8 +571,7 @@ void aes70_transport_stop(aes70_device_t *dev)
     }
     dev->task = NULL;
 
-    if (dev->listen_sock >= 0)     { close(dev->listen_sock);     dev->listen_sock = -1; }
-    if (dev->tls_listen_sock >= 0) { close(dev->tls_listen_sock); dev->tls_listen_sock = -1; }
+    close_listeners(dev);
     if (dev->wake_recv_sock >= 0)  { close(dev->wake_recv_sock);  dev->wake_recv_sock = -1; }
     if (dev->wake_send_sock >= 0)  { close(dev->wake_send_sock);  dev->wake_send_sock = -1; }
 }

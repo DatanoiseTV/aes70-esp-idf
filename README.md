@@ -97,7 +97,9 @@ recommended next check.
 - Big-endian marshalling of every base type the control classes use: integers,
   float32/float64, OcaString, OcaBlob, OcaList, OcaClassID/OcaClassIdentification,
   OcaObjectIdentification, OcaBlockMember.
-- Multiple controller connections, each with its own framing buffer.
+- Multiple controller connections, each with its own framing buffer, over both
+  **IPv4 and IPv6** (a separate dual listener; falls back to IPv4-only if lwIP
+  IPv6 is disabled).
 
 **Object model — class-agnostic and extensible**
 
@@ -165,7 +167,6 @@ rather than silently omitted:
 - Control grouping agents (OcaGrouper) and matrix (OcaMatrix).
 - Reconfigurable-DSP construction (`OcaBlock.ConstructActionObject`).
 - Firmware-update manager and the other optional managers.
-- IPv6 listener (the server currently binds IPv4 `INADDR_ANY`).
 
 ## Access control and TLS
 
