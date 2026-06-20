@@ -18,6 +18,11 @@ adheres to [Semantic Versioning](https://semver.org/).
   level (GetLabel/SetLabel/GetOwner/GetPath) and host unit tests for the full
   add/enroll/fan-out flow. Remote (cross-device) citizens are reported
   NotImplemented.
+- **Preset snapshot/recall** on OcaBlock: `FetchCurrentParameterData` (3.25)
+  returns the block subtree's scalar actuator values as an OcaLongBlob, and
+  `ApplyParameterData` (3.26) restores them (driving the application via
+  on_control_changed). The blob format is implementation-defined per the
+  standard. Host-tested capture/change/restore.
 - **OcaMatrix** (ClassID 1.1.5), a coordinate-addressable grid of member
   objects: `aes70_matrix_create()` / `aes70_matrix_set_member()`, with the full
   addressing surface (Get/SetCurrentXY, Get/SetSize, Get/SetMembers via

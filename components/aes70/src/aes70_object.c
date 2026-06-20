@@ -151,6 +151,8 @@ bool aes70_method_is_write(const struct aes70_object *obj, uint16_t level, uint1
         return level == 3 && (index==1||index==2||index==5||index==6||index==10||index==13||index==15);
     case AES70_K_MATRIX:    /* SetCurrentXY/SetSize/SetMembers/SetMember/SetProxy/SetPorts/Lock/Unlock */
         return level == 3 && (index==2||index==4||index==6||index==8||index==10||index==12||index==14||index==15||index==16);
+    case AES70_K_BLOCK:     /* ApplyParameterData restores values */
+        return level == 3 && index == 26;
     default:
         return false;   /* sensors/managers/block: no securable setters */
     }

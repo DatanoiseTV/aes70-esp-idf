@@ -382,6 +382,55 @@ static void test_matrix(void)
     aes70_device_stop(dev);
 }
 
+static void test_param_data(void)
+{
+    aes70_device_config_t cfg; aes70_device_config_default(&cfg);
+    cfg.device_name = "DSP"; cfg.manufacturer = "M"; cfg.model = "X"; cfg.enable_mdns = false;
+    aes70_device_handle_t dev; aes70_device_start(&cfg, &dev);
+
+    aes70_object_handle_t blk = aes70_block_create(dev, NULL, "Mix");
+    aes70_object_handle_t g1 = aes70_gain_create(dev, blk, "A", -80, 12, 0);
+    aes70_object_handle_t g2 = aes70_gain_create(dev, blk, "B", -80, 12, 0);
+    aes70_object_handle_t mu = aes70_mute_create(dev, blk, "AMute", false);
+    uint32_t blk_ono = aes70_object_ono(blk);
+    conn_set((aes70_device_t *)dev, 0, false);
+
+    /* Set a scene through the command path (the app setters post to the server
+     * task's queue, which the host build has no task to drain). */
+    uint8_t p[16], rp[256]; size_t rl; uint8_t st; ocp1_wr_t w;
+    f32_to_params(-6.f, p); route_cmd((aes70_device_t *)dev, 0, aes70_object_ono(g1), 4, 2, p, 4, NULL, NULL);
+    f32_to_params(3.f, p);  route_cmd((aes70_device_t *)dev, 0, aes70_object_ono(g2), 4, 2, p, 4, NULL, NULL);
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u8(&w, AES70_MUTE_MUTED);
+    route_cmd((aes70_device_t *)dev, 0, aes70_object_ono(mu), 4, 2, p, w.off, NULL, NULL);
+    CHECK(fabsf(aes70_gain_get(g1) + 6.f) < 1e-3f, "scene set g1=-6 (%.2f)", aes70_gain_get(g1));
+    st = route_cmd((aes70_device_t *)dev, 0, blk_ono, 3, 25, NULL, 0, rp, &rl);   /* FetchCurrentParameterData */
+    CHECK(st == AES70_OK, "FetchCurrentParameterData = %u", st);
+    /* OcaLongBlob: u32 len, then u16 count == 3 params (g1,g2,mute). */
+    ocp1_rd_t r; ocp1_rd_init(&r, rp, rl);
+    uint32_t blen = ocp1_rd_u32(&r); uint16_t cnt = ocp1_rd_u16(&r);
+    CHECK(blen == 2u + 3u * 12u, "blob length (%u)", blen);
+    CHECK(cnt == 3, "param count = %u", cnt);
+
+    /* Capture the blob bytes for replay. */
+    uint8_t snap[256]; size_t snap_len = rl; memcpy(snap, rp, rl);
+
+    /* Change the scene through the command path. */
+    f32_to_params(0.f, p); route_cmd((aes70_device_t *)dev, 0, aes70_object_ono(g1), 4, 2, p, 4, NULL, NULL);
+    f32_to_params(0.f, p); route_cmd((aes70_device_t *)dev, 0, aes70_object_ono(g2), 4, 2, p, 4, NULL, NULL);
+    ocp1_wr_init(&w, p, sizeof p); ocp1_wr_u8(&w, AES70_MUTE_UNMUTED);
+    route_cmd((aes70_device_t *)dev, 0, aes70_object_ono(mu), 4, 2, p, w.off, NULL, NULL);
+    CHECK(fabsf(aes70_gain_get(g1)) < 1e-6f, "scene changed to 0");
+
+    /* ApplyParameterData(blob) restores the snapshot. */
+    st = route_cmd((aes70_device_t *)dev, 0, blk_ono, 3, 26, snap, snap_len, NULL, NULL);
+    CHECK(st == AES70_OK, "ApplyParameterData = %u", st);
+    CHECK(fabsf(aes70_gain_get(g1) + 6.f) < 1e-3f, "g1 restored (%.2f)", aes70_gain_get(g1));
+    CHECK(fabsf(aes70_gain_get(g2) - 3.f) < 1e-3f, "g2 restored (%.2f)", aes70_gain_get(g2));
+    CHECK(aes70_mute_get(mu) == true, "mute restored");
+
+    aes70_device_stop(dev);
+}
+
 int main(void)
 {
     printf("AES70 host unit tests\n");
@@ -392,6 +441,7 @@ int main(void)
     test_bad_ono();
     test_grouper();
     test_matrix();
+    test_param_data();
     printf("%d checks, %d failures\n", g_checks, g_fails);
     return g_fails ? 1 : 0;
 }

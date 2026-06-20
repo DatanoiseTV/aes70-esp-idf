@@ -165,7 +165,10 @@ class descriptors without touching the protocol core. They are called out here
 rather than silently omitted:
 
 - Connection management (OcaStreamConnector / media-transport adaptations).
-- Snapshot/preset library (OcaLibraryManager, dataset objects).
+- Named preset libraries on the device (OcaLibraryManager, OcaDataset file
+  objects). Block snapshot/recall (`OcaBlock.FetchCurrentParameterData` /
+  `ApplyParameterData`) is implemented — a controller can capture and restore a
+  block's scene as an opaque blob.
 - Matrix batch ops (`OcaMatrix.ExecuteMethod` / `ExecuteCommands`); the matrix
   grid, addressing and members are implemented.
 - Reconfigurable-DSP construction (`OcaBlock.ConstructActionObject`).
