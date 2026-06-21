@@ -10,7 +10,7 @@ jobs:
     name: Host unit tests (gcc + gcov)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build and run unit tests
         run: components/aes70/test/host/run.sh
 
@@ -21,7 +21,7 @@ jobs:
       matrix:
         idf: [release-v5.3, release-v5.4]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build example
         uses: espressif/esp-idf-ci-action@v1
         with:
